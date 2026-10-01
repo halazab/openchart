@@ -51,7 +51,7 @@ export interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  providerId: 'synthetic',
+  providerId: 'binance',
   symbol: 'BTCUSD',
   symbolInfo: null,
   timeframe: '1m',

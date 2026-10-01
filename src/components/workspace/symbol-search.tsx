@@ -90,7 +90,7 @@ function SearchBody({ onPick }: { onPick: (open: boolean) => void }) {
                   pick(results[highlight].symbol);
                 }
               }}
-              placeholder="Search markets (e.g. BTC, NVDA, gold…)"
+              placeholder="Search markets (e.g. BTC, ETH, TSLA…)"
               className="h-10 w-full bg-transparent text-[13px] text-[#e6e9ef] outline-none placeholder:text-[#585f6d]"
               aria-label="Symbol search input"
             />

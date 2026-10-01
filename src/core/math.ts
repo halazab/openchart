@@ -22,58 +22,6 @@ export function timeLowerBound(times: Float64Array, length: number, t: number): 
   return ans;
 }
 
-/** Binary search: index of the first element with `times[i] >= t`, or `length`. */
-export function timeUpperBound(times: Float64Array, length: number, t: number): number {
-  let lo = 0;
-  let hi = length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (times[mid] < t) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
-
-/** Floor-division helper that behaves correctly for negative numbers. */
-export function floorDiv(a: number, b: number): number {
-  return Math.floor(a / b);
-}
-
-/**
- * Deterministic 32-bit PRNG (mulberry32). Returns a closure producing
- * floats in [0, 1). Used by the synthetic provider so generated markets
- * are reproducible across sessions.
- */
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return function () {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Fast string → 32-bit hash (FNV-1a) for per-symbol seeds. */
-export function hashString(str: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
-/** Standard normal via Box–Muller (lazy in cos/sin caching). */
-export function gaussian(rand: () => number): number {
-  let u = 0;
-  let v = 0;
-  while (u === 0) u = rand();
-  while (v === 0) v = rand();
-  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-}
-
 export function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
 }

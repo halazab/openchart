@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { useUiStore } from '@/lib/ui-store';
-import { getProvider, DEFAULT_WATCHLIST, switchProvider } from '@/lib/provider-registry';
+import { getProvider, DEFAULT_PROVIDER_ID, defaultBootConfig, switchProvider } from '@/lib/provider-registry';
 import { ChartEngine } from '@/core/chart-engine';
 import type { ConnectionStatus } from '@/core/types';
 import { TopBar } from './top-bar';
@@ -57,10 +57,11 @@ export function ChartWorkspace() {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const boot = defaultBootConfig();
     const engine = new ChartEngine({
       container: containerRef.current,
-      provider: getProvider('synthetic'),
-      symbol: 'BTCUSD',
+      provider: getProvider(DEFAULT_PROVIDER_ID),
+      symbol: boot.symbol,
       timeframe: '1m',
     });
     engineRef.current = engine;
@@ -138,8 +139,8 @@ export function ChartWorkspace() {
       }),
     );
 
-    engine.setWatchlist(DEFAULT_WATCHLIST);
-    useUiStore.getState().setWatchlist(DEFAULT_WATCHLIST);
+    engine.setWatchlist(boot.watchlist);
+    useUiStore.getState().setWatchlist(boot.watchlist);
     void engine.mount();
 
     return () => {

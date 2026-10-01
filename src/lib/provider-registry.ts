@@ -2,40 +2,41 @@
  * Provider registry — the only place that knows which providers exist.
  * Adding a vendor = implementing MarketDataProvider + one line here.
  *
- * Available providers:
- *  - synthetic  : offline deterministic simulator (equity sessions, ticks)
- *  - binance    : real public crypto data (REST + WS, no key)
+ * Available providers (all real market data):
+ *  - binance    : Binance public crypto data (REST + WS, no key)
  *  - tradingview: full TradingView universe via the @mathieuc/tradingview
  *                 library, proxied by mini-services/tradingview-bridge
  *                 (Node-only WebSocket client behind the gateway)
  */
 
 import type { MarketDataProvider } from '@/provider-sdk/types';
-import { SyntheticMarketProvider } from '@/providers/synthetic';
 import { BinanceMarketProvider } from '@/providers/binance';
 import { TradingViewProvider } from '@/providers/tradingview';
 
 export const PROVIDERS: MarketDataProvider[] = [
-  new SyntheticMarketProvider(),
   new BinanceMarketProvider(),
   new TradingViewProvider(),
 ];
+
+/** The first registered provider boots with the app. */
+export const DEFAULT_PROVIDER_ID = PROVIDERS[0].id;
 
 export function getProvider(id: string): MarketDataProvider {
   const found = PROVIDERS.find((p) => p.id === id);
   return found ?? PROVIDERS[0];
 }
 
-/** Shared watchlist for providers using short tickers (synthetic/binance). */
-export const DEFAULT_WATCHLIST = [
-  'BTCUSD',
-  'ETHUSD',
-  'SOLUSD',
-  'NVDA',
-  'AAPL',
-  'TSLA',
-  'SPY',
-];
+/** Boot configuration (provider + symbol + watchlist) for app startup. */
+export function defaultBootConfig(): {
+  provider: MarketDataProvider;
+  symbol: string;
+  watchlist: string[];
+} {
+  const provider = PROVIDERS[0];
+  const watchlist = provider.defaultWatchlist ?? [];
+  const symbol = watchlist[0] ?? '';
+  return { provider, symbol, watchlist };
+}
 
 /**
  * Switch the active provider AND realign symbol + watchlist with the
@@ -47,8 +48,8 @@ export async function switchProvider(
   providerId: string,
 ): Promise<void> {
   const provider = getProvider(providerId);
-  const watchlist = provider.defaultWatchlist ?? DEFAULT_WATCHLIST;
-  const defaultSymbol = watchlist[0] ?? 'BTCUSD';
+  const watchlist = provider.defaultWatchlist ?? [];
+  const defaultSymbol = watchlist[0] ?? '';
   setWatchlist(watchlist);
   await apply(provider, defaultSymbol);
 }

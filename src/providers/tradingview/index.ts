@@ -45,7 +45,6 @@ interface HistoryAck {
 export class TradingViewProvider implements MarketDataProvider {
   readonly id = 'tradingview';
   readonly name = 'TradingView (bridge)';
-  readonly offline = false;
 
   /** Provider-appropriate default watchlist (full TV symbols). */
   readonly defaultWatchlist: string[] = [

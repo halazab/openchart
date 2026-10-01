@@ -11,8 +11,8 @@
  *   - bar updates are collapsed per (timeframe) — last write wins, but
  *     an `isNew` rollover is always preserved so appends are never lost
  *
- * This module is transport-agnostic: WebSocket, SSE, postMessage or a
- * simulator can all feed `push*()` methods.
+ * This module is transport-agnostic: WebSocket, SSE or postMessage can
+ * all feed `push*()` methods.
  */
 
 import type { Bar, BarUpdate, MarketBatch, Quote, Trade } from './types';

@@ -12,7 +12,6 @@ for plugging any market-data source into the platform.
 interface MarketDataProvider {
   readonly id: string;          // unique, used by the provider registry
   readonly name: string;        // shown in the status bar
-  readonly offline: boolean;    // true → generated locally (no network)
 
   searchSymbols(query: string, limit?: number): Promise<SymbolInfo[]>;
   getSymbol(symbol: string): Promise<SymbolInfo>;
@@ -84,7 +83,7 @@ interface Quote {
 interface SymbolInfo {
   symbol: string;            // canonical request id, e.g. "BTCUSD"
   name: string;              // full name (search + details)
-  exchange: string;          // display code ("BINANCE", "SYNTH")
+  exchange: string;          // display code ("BINANCE", "NASDAQ")
   type: 'crypto' | 'stock' | 'index' | 'forex' | 'futures';
   ticker: string;            // short legend/watchlist code
   description?: string;
@@ -117,10 +116,8 @@ interface HistoricalBarsProvider {
   edge (60 bars of headroom), prepends them into the typed-array store and
   shifts the visible range so the viewport is stable.
 
-Reference implementations to copy from:
+Reference implementation to copy from:
 
-- **`src/providers/synthetic/index.ts`** — caches aggregated series, binary
-  search over cached times (cheapest correct pattern for custom backends).
 - **`src/providers/binance/index.ts`** — vendor paging loop (newest-first
   REST pages re-assembled ascending).
 
@@ -141,8 +138,8 @@ interface RealtimeQuotesProvider {
 Rules:
 
 - Return an **idempotent unsubscribe**; after the last unsubscribe for a
-  symbol you should tear down vendor subscriptions (see the synthetic
-  provider's trade-feed refcounting).
+  symbol you should tear down vendor subscriptions (refcount handlers per
+  symbol and clean up at zero).
 - Push updates as they arrive; **do not throttle yourself** — the engine's
   `BatchingIngestor` coalesces everything (50 ms flush by default, quote
   collapsing per symbol, bar rollover preservation). That layer exists
@@ -170,7 +167,6 @@ provider):
 ```ts
 // src/lib/provider-registry.ts
 export const PROVIDERS: MarketDataProvider[] = [
-  new SyntheticMarketProvider(),
   new BinanceMarketProvider(),
   new MyVendorProvider(),   // ← add here; the status-bar menu picks it up
 ];
@@ -225,8 +221,7 @@ browser adapter in `src/providers/tradingview/index.ts`.
 
 ## 10. In-tree providers
 
-| Provider | Offline | History | Realtime | Notes |
-|---|---|---|---|---|
-| `synthetic` | ✓ | 1m base, cached per-TF aggregation, ~10.5 months | tick feed → `TradeAggregator` | deterministic seeds; equity sessions 08:00–24:00 UTC incl. pre/post |
-| `binance` | ✗ | `/api/v3/klines` (1000/page loop) | combined WS: `@kline_<tf>` + `@miniTicker` | public endpoints, no key; browser CORS OK |
-| `tradingview` | ✗ | TradingView chart sessions (chunked `to`/`range` fetches) | TV chart + quote sessions via socket.io bridge | Node-only library behind `mini-services/tradingview-bridge`; full TV symbol universe (`EXCHANGE:SYMBOL` ids) |
+| Provider | History | Realtime | Notes |
+|---|---|---|---|
+| `binance` | `/api/v3/klines` (1000/page loop) | combined WS: `@kline_<tf>` + `@miniTicker` | public endpoints, no key; browser CORS OK |
+| `tradingview` | TradingView chart sessions (chunked `to`/`range` fetches) | TV chart + quote sessions via socket.io bridge | Node-only library behind `mini-services/tradingview-bridge`; full TV symbol universe (`EXCHANGE:SYMBOL` ids) |

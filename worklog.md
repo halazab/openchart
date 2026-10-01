@@ -31,3 +31,22 @@ Work Log:
 
 Stage Summary:
 - TradingView is now a first-class pluggable provider alongside synthetic + binance; the bridge pattern is documented in README + docs/provider-interfaces.md (server-side vendor bridge section).
+
+---
+Task ID: 3
+Agent: main (Super Z)
+Task: Remove ALL mock data from the platform (synthetic provider + every leftover)
+
+Work Log:
+- Deleted src/providers/synthetic/ entirely (generator.ts, symbols.ts, index.ts) — the offline market simulator is gone.
+- provider-registry.ts rewritten: only binance + tradingview registered; removed the hardcoded mixed DEFAULT_WATCHLIST (BTCUSD/NVDA/AAPL/TSLA/SPY leftovers); added DEFAULT_PROVIDER_ID + defaultBootConfig() so boot config comes from the first provider's own defaultWatchlist; switchProvider now falls back to [] instead of a fake list.
+- Binance provider: removed dead mock seed `price` fields from PAIRS; added real defaultWatchlist = all 10 mapped pairs. TradingView provider keeps its real TV-universe watchlist.
+- Removed the `offline` (offline sim) flag from MarketDataProvider contract + both providers + status-bar label "· offline sim"; removed "simulator" mentions from provider-sdk/types.ts and batching.ts doc comments.
+- chart-workspace.tsx boots via defaultBootConfig() (no hardcoded getProvider('synthetic')/'BTCUSD'); ui-store default providerId 'synthetic' → 'binance'.
+- core/math.ts: removed dead mock-only utils (mulberry32 PRNG, gaussian, hashString, timeUpperBound, floorDiv); kept timeLowerBound/clamp/distance/formatting.
+- symbol-search placeholder example NVDA→ETH (NVDA was a synthetic-era example); README + docs/provider-interfaces.md purged of synthetic/simulator references (provider list, architecture diagram, module map, contract sample, reference implementations, registration example, in-tree provider table).
+- Verification: tsc clean in src/ (only pre-existing examples/+skills/ errors unrelated to app), eslint clean, BarStore stress test ALL PASS.
+- Browser E2E via gateway :81: app boots on Binance (BTCUSD 1m, 3,001 real bars, live kline ticks, 60fps); provider dropdown lists only Binance (public) + TradingView (bridge); TV switch realigns symbol → BINANCE:BTCUSDT with real live watchlist quotes (BTCUSDT/ETHUSDT/SOLUSDT/AAPL/NVDA/TSLA/SPX/EURUSD), no error toasts. Note: testing TV at :3000 (without gateway) fails by design — XTransformPort routing requires :81.
+
+Stage Summary:
+- The platform now contains ZERO mock/simulated data: every bar, quote and tick comes from real providers (Binance public REST+WS, TradingView bridge). Plugin contract unchanged for future community providers.

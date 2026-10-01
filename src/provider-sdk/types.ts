@@ -2,9 +2,9 @@
  * provider-sdk — market-data contracts.
  *
  * The charting system knows NOTHING about any concrete vendor. It only
- * consumes these interfaces. A provider can be a simulator, a REST+WebSocket
- * backend, a company internal feed, or a community adapter — swapping it
- * never touches chart/indicator/drawing code.
+ * consumes these interfaces. A provider can be a REST+WebSocket backend,
+ * a company internal feed, or a community adapter — swapping it never
+ * touches chart/indicator/drawing code.
  *
  * See `docs/provider-interfaces.md` for a full authoring guide.
  */
@@ -137,8 +137,6 @@ export interface SymbolSearchResult {
 export interface MarketDataProvider {
   readonly id: string;
   readonly name: string;
-  /** True when historical/realtime data is generated locally (offline). */
-  readonly offline: boolean;
   /** Provider-appropriate watchlist symbols (set on provider switch). */
   readonly defaultWatchlist?: string[];
 

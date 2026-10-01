@@ -83,7 +83,6 @@ export function StatusBar({ engine }: { engine: ChartEngine | null }) {
               className={cn('text-[11px]', p.id === providerId && 'bg-[#262c37]')}
             >
               {p.name}
-              {p.offline ? ' · offline sim' : ''}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

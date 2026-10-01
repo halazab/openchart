@@ -60,11 +60,8 @@ building block. No proprietary SDKs, no embedded TradingView widgets.
 - **BatchingIngestor** — coalesces high-frequency updates (50 ms flush),
   collapses quotes per symbol, preserves bar rollovers
 - **TradeAggregator** — folds raw trade prints into OHLCV buckets
-  (exercised by the synthetic provider's tick feed)
-- Three providers ship in-tree:
-  - `synthetic` — deterministic offline market simulator (equity sessions,
-    extended hours, tick-level realtime; `bars()` intentionally null to
-    exercise the trades→bars aggregation path)
+  (for vendors whose realtime feed is trade-level, e.g. exchange tick streams)
+- Two real providers ship in-tree:
   - `binance` — real public crypto data (REST klines + combined WS streams,
     no API key), a production vendor adapter with reconnect/backoff
   - `tradingview` — the **full TradingView instrument universe** via
@@ -90,8 +87,9 @@ bun scripts/test-bar-store.ts   # store pagination stress test
 ```
 
 Try: switch symbol (click the symbol chip), switch timeframe, pan left past
-history (pagination), add indicators, draw a trendline, switch provider to
-**Binance (public)** in the status bar for real market data.
+history (pagination), add indicators, draw a trendline. The app boots on the
+**Binance (public)** provider; switch to **TradingView (bridge)** in the
+status bar for the full multi-exchange universe (stocks, indices, forex).
 
 ---
 
@@ -119,10 +117,14 @@ history (pagination), add indicators, draw a trendline, switch provider to
 │   BatchingIngestor · TradeAggregator                                │
 └──────┬──────────────────────────────┬───────────────────────────────┘
        │                              │
-┌──────▼─────────────┐     ┌──────────▼──────────────┐
-│ providers/synthetic│     │ providers/binance       │
-│ (offline simulator)│     │ (real REST + WebSocket) │
-└────────────────────┘     └─────────────────────────┘
+       │                 ┌────────────▼──────────────┐
+       │                 │ providers/binance         │
+       │                 │ (real REST + WebSocket)   │
+       │                 └───────────────────────────┘
+┌──────▼─────────────────────────────────────────────────────────────┐
+│ providers/tradingview                                              │
+│ (browser adapter → gateway → mini-services/tradingview-bridge)     │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 **Dependency rule:** arrows point one way. `provider-sdk` and `core/types`
@@ -137,7 +139,7 @@ library — they talk to narrow interfaces (`CoordinateSpace`,
 | `src/core/` | chart-core | shared types, `TypedEmitter`, math utils, `ChartEngine` facade |
 | `src/data/` | data-engine | `BarStore` (column-oriented typed arrays), pagination glue |
 | `src/provider-sdk/` | provider-sdk | contracts, `BatchingIngestor`, `TradeAggregator` |
-| `src/providers/` | provider plugins | `synthetic`, `binance`, `tradingview` adapters |
+| `src/providers/` | provider plugins | `binance`, `tradingview` adapters |
 | `src/indicators/` | indicator-engine | plugin API, registry, 8 built-ins, worker scheduler, instance engine |
 | `src/drawings/` | drawing-engine | model, geometry, renderer, interactions, history, manager |
 | `src/render/` | chart-renderer | LWC adapter, `CoordinateSpace`, overlay layers, legend controller |

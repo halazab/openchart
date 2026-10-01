@@ -46,20 +46,19 @@ interface PairSpec {
   symbol: string;
   pair: string;
   name: string;
-  price: number;
 }
 
 const PAIRS: PairSpec[] = [
-  { symbol: 'BTCUSD', pair: 'btcusdt', name: 'Bitcoin / TetherUS', price: 67450 },
-  { symbol: 'ETHUSD', pair: 'ethusdt', name: 'Ethereum / TetherUS', price: 3512 },
-  { symbol: 'SOLUSD', pair: 'solusdt', name: 'Solana / TetherUS', price: 162.4 },
-  { symbol: 'BNBUSD', pair: 'bnbusdt', name: 'BNB / TetherUS', price: 592.3 },
-  { symbol: 'XRPUSD', pair: 'xrpusdt', name: 'XRP / TetherUS', price: 0.5231 },
-  { symbol: 'DOGEUSD', pair: 'dogeusdt', name: 'Dogecoin / TetherUS', price: 0.1284 },
-  { symbol: 'ADAUSD', pair: 'adausdt', name: 'Cardano / TetherUS', price: 0.4472 },
-  { symbol: 'LINKUSD', pair: 'linkusdt', name: 'Chainlink / TetherUS', price: 14.62 },
-  { symbol: 'AVAXUSD', pair: 'avaxusdt', name: 'Avalanche / TetherUS', price: 27.35 },
-  { symbol: 'LTCUSD', pair: 'ltcusdt', name: 'Litecoin / TetherUS', price: 68.24 },
+  { symbol: 'BTCUSD', pair: 'btcusdt', name: 'Bitcoin / TetherUS' },
+  { symbol: 'ETHUSD', pair: 'ethusdt', name: 'Ethereum / TetherUS' },
+  { symbol: 'SOLUSD', pair: 'solusdt', name: 'Solana / TetherUS' },
+  { symbol: 'BNBUSD', pair: 'bnbusdt', name: 'BNB / TetherUS' },
+  { symbol: 'XRPUSD', pair: 'xrpusdt', name: 'XRP / TetherUS' },
+  { symbol: 'DOGEUSD', pair: 'dogeusdt', name: 'Dogecoin / TetherUS' },
+  { symbol: 'ADAUSD', pair: 'adausdt', name: 'Cardano / TetherUS' },
+  { symbol: 'LINKUSD', pair: 'linkusdt', name: 'Chainlink / TetherUS' },
+  { symbol: 'AVAXUSD', pair: 'avaxusdt', name: 'Avalanche / TetherUS' },
+  { symbol: 'LTCUSD', pair: 'ltcusdt', name: 'Litecoin / TetherUS' },
 ];
 
 const BY_SYMBOL = new Map(PAIRS.map((p) => [p.symbol, p]));
@@ -250,7 +249,9 @@ interface MiniTickerMsg {
 export class BinanceMarketProvider implements MarketDataProvider {
   readonly id = 'binance';
   readonly name = 'Binance (public)';
-  readonly offline = false;
+
+  /** Provider-appropriate default watchlist (short tickers). */
+  readonly defaultWatchlist: string[] = PAIRS.map((p) => p.symbol);
 
   private socket: BinanceSocket;
   private statusValue: ConnectionStatus = 'idle';
