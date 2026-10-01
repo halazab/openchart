@@ -22,6 +22,9 @@ import { SymbolSearchDialog } from './symbol-search';
 import { IndicatorDialog } from './indicator-dialog';
 import { SettingsPopover } from './settings-popover';
 import { SelectionStylePopover } from './selection-style-popover';
+import { StrategyPanel } from './strategy-panel';
+import { ReplayToolbar } from './replay-toolbar';
+import { ChartContextMenu } from './chart-context-menu';
 
 let engineSingleton: ChartEngine | null = null;
 
@@ -138,6 +141,11 @@ export function ChartWorkspace() {
         });
       }),
     );
+    unsubs.push(
+      engine.events.on('replay-changed', ({ active, playing, speed }) => {
+        useUiStore.getState().setReplayState(active, playing, speed);
+      }),
+    );
 
     engine.setWatchlist(boot.watchlist);
     useUiStore.getState().setWatchlist(boot.watchlist);
@@ -152,13 +160,32 @@ export function ChartWorkspace() {
     };
   }, []);
 
-  // Global shortcuts: undo/redo for drawings.
+  // Global shortcuts: undo/redo for drawings + replay controls.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
       const engine = engineRef.current;
       if (!engine) return;
+      const replay = useUiStore.getState().replayActive;
+      if (e.altKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        if (replay) engine.exitReplay();
+        else engine.enterReplay(Math.max(0, engine.store.length - 301));
+        return;
+      }
+      if (!replay) return;
+      if (e.key === 'ArrowLeft' || e.key === ',') {
+        e.preventDefault();
+        engine.replayStep(-1);
+      } else if (e.key === 'ArrowRight' || e.key === '.') {
+        e.preventDefault();
+        engine.replayStep(1);
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        if (useUiStore.getState().replayPlaying) engine.replayPause();
+        else engine.replayPlay();
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) engine.redo();
@@ -185,14 +212,17 @@ export function ChartWorkspace() {
             className="absolute inset-0"
             // LWC injects its own canvases; the overlay + legends are added by the engine.
           />
+          <ReplayToolbar />
           <SettingsPopover />
           <SelectionStylePopover />
         </main>
         {watchlistOpen ? <WatchlistPanel engine={engine} /> : null}
       </div>
+      <StrategyPanel />
       <StatusBar engine={engine} />
       <SymbolSearchDialog />
       <IndicatorDialog />
+      <ChartContextMenu />
     </div>
   );
 }

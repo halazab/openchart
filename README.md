@@ -26,10 +26,26 @@ building block. No proprietary SDKs, no embedded TradingView widgets.
 - Extended-hours sessions (pre/post-market) with **session breaks**
   and extended-hours shading (equity symbols)
 - **Real-time candle updates** (tick → aggregate → coalesce → update)
+- **Bar replay** — time freezes at any bar (right-click → "Start bar replay
+  from here", or `Alt+R`), then step (`,`/`.` or arrows), play/pause
+  (`space`) at 0.5×–10× speed; realtime streams pause, indicators and
+  markers track the replay cursor
+- **Strategy Tester (backtesting)** — EMA Cross, RSI Reversion, MACD Cross,
+  Bollinger Reversion: configurable params, long-only / long-short,
+  commission % and optional SL/TP; honest fill semantics (signals on close,
+  fills at next open, intrabar protective exits); net profit, buy & hold,
+  win rate, profit factor, max drawdown, expectancy, per-trade table and
+  equity curve; entries/exits render as chart markers
 - **Historical pagination** when scrolling backward (5k-bar pages,
   visible-range preserving)
 - Efficient handling of hundreds of thousands of bars (typed-array store,
   viewport-based rendering, indicator downsampling)
+
+### Watchlist & tools
+- Live quotes with per-symbol prices, day change %, imperative tick flash
+- **Add/remove symbols** (+ button → search in add mode, hover × to remove)
+- **Per-provider persistence** — each provider's watchlist survives reloads
+- Symbol details block (day O/H/L/V, session model)
 
 ### Indicator engine
 - Built-ins: **SMA, EMA, VWAP (session-anchored), RSI, MACD, Bollinger Bands
@@ -46,6 +62,10 @@ building block. No proprietary SDKs, no embedded TradingView widgets.
   date range, Fibonacci retracement, parallel channel**
 - Selection, dragging, resizing (endpoint/corner handles), delete
 - Per-object style properties (color / width / dash) via floating editor
+- **Right-click context menu** — horizontal line at price, replay from
+  this bar, copy price, reset view
+- **Bar-close countdown** on the last-price label (hidden during replay)
+- **PNG export** (camera button) of the visible chart
 - **Serialization** to versioned JSON, **restoration** (per-symbol localStorage)
 - **Undo/redo** (command stack, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y)
 - **Zero coupling to Lightweight Charts internals** — drawings live in

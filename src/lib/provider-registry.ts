@@ -12,6 +12,7 @@
 import type { MarketDataProvider } from '@/provider-sdk/types';
 import { BinanceMarketProvider } from '@/providers/binance';
 import { TradingViewProvider } from '@/providers/tradingview';
+import { loadSavedWatchlist } from '@/lib/watchlist-store';
 
 export const PROVIDERS: MarketDataProvider[] = [
   new BinanceMarketProvider(),
@@ -33,14 +34,16 @@ export function defaultBootConfig(): {
   watchlist: string[];
 } {
   const provider = PROVIDERS[0];
-  const watchlist = provider.defaultWatchlist ?? [];
+  const saved = typeof window !== 'undefined' ? loadSavedWatchlist(provider.id) : null;
+  const watchlist = saved ?? provider.defaultWatchlist ?? [];
   const symbol = watchlist[0] ?? '';
   return { provider, symbol, watchlist };
 }
 
 /**
  * Switch the active provider AND realign symbol + watchlist with the
- * provider's own instrument universe (full TV symbols vs short tickers).
+ * provider's own instrument universe. A provider's saved watchlist
+ * (localStorage) wins over its built-in default.
  */
 export async function switchProvider(
   apply: (provider: MarketDataProvider, symbol: string) => Promise<void>,
@@ -48,7 +51,8 @@ export async function switchProvider(
   providerId: string,
 ): Promise<void> {
   const provider = getProvider(providerId);
-  const watchlist = provider.defaultWatchlist ?? [];
+  const saved = typeof window !== 'undefined' ? loadSavedWatchlist(providerId) : null;
+  const watchlist = saved ?? provider.defaultWatchlist ?? [];
   const defaultSymbol = watchlist[0] ?? '';
   setWatchlist(watchlist);
   await apply(provider, defaultSymbol);

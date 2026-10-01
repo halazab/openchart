@@ -28,9 +28,17 @@ export interface UiState {
   settingsChanged: { magnet: boolean; hidden: boolean; extendedHours: boolean; sessionBreaks: boolean } | null;
 
   symbolSearchOpen: boolean;
+  /** What a symbol-search pick does: load on chart vs add to watchlist. */
+  symbolSearchMode: 'load' | 'watchlist';
   indicatorsOpen: boolean;
   settingsOpen: boolean;
   watchlistOpen: boolean;
+  /** Strategy Tester bottom panel. */
+  strategyOpen: boolean;
+  /** Mirrors of the engine replay state (low-frequency fields only). */
+  replayActive: boolean;
+  replayPlaying: boolean;
+  replaySpeed: number;
 
   setProviderId: (id: string) => void;
   setSymbol: (symbol: string, info: SymbolInfo | null) => void;
@@ -45,9 +53,12 @@ export interface UiState {
   setHistoryFlags: (canUndo: boolean, canRedo: boolean) => void;
   setSettingsChanged: (v: { magnet: boolean; hidden: boolean; extendedHours: boolean; sessionBreaks: boolean }) => void;
   setSymbolSearchOpen: (open: boolean) => void;
+  setSymbolSearchMode: (mode: 'load' | 'watchlist') => void;
   setIndicatorsOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setWatchlistOpen: (open: boolean) => void;
+  setStrategyOpen: (open: boolean) => void;
+  setReplayState: (active: boolean, playing: boolean, speed: number) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -67,9 +78,14 @@ export const useUiStore = create<UiState>((set) => ({
   settingsChanged: null,
 
   symbolSearchOpen: false,
+  symbolSearchMode: 'load',
   indicatorsOpen: false,
   settingsOpen: false,
   watchlistOpen: true,
+  strategyOpen: false,
+  replayActive: false,
+  replayPlaying: false,
+  replaySpeed: 1,
 
   setProviderId: (providerId) => set({ providerId }),
   setSymbol: (symbol, symbolInfo) => set({ symbol, symbolInfo }),
@@ -84,7 +100,10 @@ export const useUiStore = create<UiState>((set) => ({
   setHistoryFlags: (canUndo, canRedo) => set({ canUndo, canRedo }),
   setSettingsChanged: (settingsChanged) => set({ settingsChanged }),
   setSymbolSearchOpen: (symbolSearchOpen) => set({ symbolSearchOpen }),
+  setSymbolSearchMode: (symbolSearchMode) => set({ symbolSearchMode }),
   setIndicatorsOpen: (indicatorsOpen) => set({ indicatorsOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setWatchlistOpen: (watchlistOpen) => set({ watchlistOpen }),
+  setStrategyOpen: (strategyOpen) => set({ strategyOpen }),
+  setReplayState: (replayActive, replayPlaying, replaySpeed) => set({ replayActive, replayPlaying, replaySpeed }),
 }));

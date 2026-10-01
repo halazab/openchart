@@ -37,6 +37,8 @@ import { SessionBreaksLayer } from '../render/overlay/session-layer';
 import { VolumeProfileLayer } from '../render/overlay/volume-profile-layer';
 import { BandFillLayer, type BandFillSpec } from '../render/overlay/band-fill-layer';
 import { LegendController } from '../render/legend-controller';
+import { CountdownLabel } from '../render/countdown-label';
+import { runBacktest, type BacktestConfig, type BacktestResult } from '../backtest';
 
 import { IndicatorEngine } from '../indicators/engine';
 import { IndicatorScheduler } from '../indicators/scheduler';
@@ -93,6 +95,16 @@ export class ChartEngine {
 
   private vpDebounce: ReturnType<typeof setTimeout> | null = null;
   private indicatorRecomputeDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  // Bar replay state (null = inactive).
+  private replay: {
+    index: number;
+    playing: boolean;
+    speed: number;
+    timer: ReturnType<typeof setInterval> | null;
+  } | null = null;
+  private lastBacktestMarkers: import('../render/lwc-adapter').TradeMarkerInput[] = [];
+  private countdown: CountdownLabel | null = null;
 
   // Perf counters.
   private frameCount = 0;
@@ -158,18 +170,21 @@ export class ChartEngine {
     this.indicators = new IndicatorEngine({
       scheduler: this.scheduler,
       host: this.adapter,
-      getInput: () => ({
-        times: this.store.times(),
-        open: this.store.open(),
-        high: this.store.high(),
-        low: this.store.low(),
-        close: this.store.close(),
-        volume: this.store.volume(),
-        flags: this.store.flags(),
-        length: this.store.length,
-      }),
+      getInput: () => {
+        const len = this.effectiveLength();
+        return {
+          times: this.store.times().subarray(0, len),
+          open: this.store.open().subarray(0, len),
+          high: this.store.high().subarray(0, len),
+          low: this.store.low().subarray(0, len),
+          close: this.store.close().subarray(0, len),
+          volume: this.store.volume().subarray(0, len),
+          flags: this.store.flags().subarray(0, len),
+          length: len,
+        };
+      },
       timeAt: (i) => this.store.timeAt(i),
-      barCount: () => this.store.length,
+      barCount: () => this.effectiveLength(),
       getVisibleRange: () => this.adapter?.getVisibleRange() ?? { start: 0, end: 0 },
       onOverlayResult: () => this.overlay?.markDirty(),
     });
@@ -182,6 +197,18 @@ export class ChartEngine {
 
     this.legend = new LegendController(this.adapter, this.store, () => this.indicators ?? null);
     this.legend.setDisplay(this.chartType, this.timeframe);
+
+    this.countdown = new CountdownLabel(this.container, {
+      getLastBarOpen: () => this.store.lastTime(),
+      getLastClose: () => {
+        const n = this.store.length;
+        return n > 0 ? this.store.close()[n - 1] : null;
+      },
+      getTimeframeSeconds: () => TIMEFRAME_SECONDS[this.timeframe],
+      isReplayActive: () => this.replay !== null,
+      priceToY: (price) => this.adapter?.coordinateSpace().priceToY(price) ?? null,
+      mainPaneOffsetY: () => this.adapter?.coordinateSpace().mainPaneRect()?.y ?? null,
+    });
 
     this.ingestor.setConsumer((batch) => this.handleBatch(batch));
     this.applyDisplaySettings();
@@ -200,10 +227,13 @@ export class ChartEngine {
 
   destroy(): void {
     this.mounted = false;
+    this.teardownReplay(false);
     this.clearRealtime();
     this.ingestor.dispose();
     this.scheduler.dispose();
     this.stopPerfLoop();
+    this.countdown?.dispose();
+    this.countdown = null;
     this.drawings?.dispose();
     this.indicators?.dispose();
     this.legend?.dispose();
@@ -343,8 +373,191 @@ export class ChartEngine {
   }
 
   resetView(): void {
-    const n = this.store.length;
+    const n = this.effectiveLength();
     this.adapter?.setVisibleLogicalRange({ from: Math.max(0, n - 180), to: n + 10 });
+  }
+
+  /** Number of bars the chart should "see" (replay cut or full store). */
+  private effectiveLength(): number {
+    return this.replay ? this.replay.index + 1 : this.store.length;
+  }
+
+  // -------------------------------------------------------------------------
+  // Bar replay
+  // -------------------------------------------------------------------------
+
+  getReplayState(): { active: boolean; index: number; total: number; playing: boolean; speed: number } {
+    if (!this.replay) {
+      return { active: false, index: this.store.length, total: this.store.length, playing: false, speed: 1 };
+    }
+    return {
+      active: true,
+      index: this.replay.index,
+      total: this.store.length,
+      playing: this.replay.playing,
+      speed: this.replay.speed,
+    };
+  }
+
+  private emitReplayChanged(): void {
+    this.events.emit('replay-changed', this.getReplayState());
+  }
+
+  /**
+   * Enter replay mode: time stops at `fromIndex` (default end), realtime
+   * streams are paused and bars after the cut are hidden. Quotes for the
+   * watchlist stay live.
+   */
+  enterReplay(fromIndex?: number): void {
+    if (this.store.length < 2) return;
+    if (this.replay) this.teardownReplay(false);
+    const idx = Math.min(Math.max(0, fromIndex ?? this.store.length - 1), this.store.length - 1);
+    this.clearRealtime();
+    this.subscribeQuotes(); // watchlist stays live while the chart is frozen
+    this.replay = { index: idx, playing: false, speed: 1, timer: null };
+    if (this.adapter) {
+      this.adapter.dataLengthLimit = idx + 1;
+      this.adapter.applyFullData();
+      this.adapter.setVisibleLogicalRange({ from: Math.max(0, idx - 179), to: idx + 10 });
+    }
+    void this.indicators?.recomputeAll();
+    this.legend?.renderValues(null);
+    this.overlay?.markDirty();
+    this.emitReplayChanged();
+  }
+
+  /** Advance (steps > 0) or rewind (steps < 0) the replay cursor. */
+  replayStep(steps: number): void {
+    if (!this.replay || !this.adapter) return;
+    const len = this.store.length;
+    const next = Math.min(Math.max(0, this.replay.index + steps), len - 1);
+    if (next === this.replay.index) {
+      if (next === len - 1 && this.replay.playing) this.replayPause();
+      return;
+    }
+    const forward = next > this.replay.index;
+    this.replay.index = next;
+    if (forward && steps === 1) {
+      const bar = this.store.barAt(next);
+      if (bar) this.adapter.updateLastBar(bar, next);
+    } else {
+      this.adapter.applyFullData();
+    }
+    // Indicators + overlays track the cut (deps read effectiveLength()).
+    if (forward && steps === 1) this.indicators?.onRealtimeUpdate();
+    else void this.indicators?.recomputeAll();
+    this.scheduleVpRecompute(120);
+    this.legend?.renderValues(null);
+    this.overlay?.notifyBarUpdate();
+    this.overlay?.markDirty();
+    this.emitReplayChanged();
+  }
+
+  replayPlay(): void {
+    if (!this.replay || this.replay.playing) return;
+    if (this.replay.index >= this.store.length - 1) return;
+    this.replay.playing = true;
+    const interval = Math.max(100, Math.round(1000 / this.replay.speed));
+    this.replay.timer = setInterval(() => {
+      if (!this.replay) return;
+      this.replayStep(1);
+    }, interval);
+    this.emitReplayChanged();
+  }
+
+  replayPause(): void {
+    if (!this.replay || !this.replay.playing) return;
+    this.replay.playing = false;
+    if (this.replay.timer) clearInterval(this.replay.timer);
+    this.replay.timer = null;
+    this.emitReplayChanged();
+  }
+
+  setReplaySpeed(speed: number): void {
+    if (!this.replay) return;
+    this.replay.speed = speed;
+    if (this.replay.playing) {
+      if (this.replay.timer) clearInterval(this.replay.timer);
+      const interval = Math.max(100, Math.round(1000 / speed));
+      this.replay.timer = setInterval(() => this.replayStep(1), interval);
+    }
+    this.emitReplayChanged();
+  }
+
+  exitReplay(): void {
+    if (!this.replay) return;
+    this.teardownReplay(true);
+  }
+
+  /** Tear down replay; `restore` re-fills data + realtime (skipped when a full reload follows). */
+  private teardownReplay(restore: boolean): void {
+    if (!this.replay) return;
+    if (this.replay.timer) clearInterval(this.replay.timer);
+    this.replay = null;
+    if (restore && this.adapter) {
+      this.adapter.dataLengthLimit = null;
+      this.adapter.applyFullData();
+      void this.indicators?.recomputeAll();
+      this.legend?.renderValues(null);
+      this.overlay?.markDirty();
+      this.resetView();
+      this.subscribeRealtime();
+      this.subscribeQuotes();
+    }
+    this.emitReplayChanged();
+  }
+
+  // -------------------------------------------------------------------------
+  // Strategy backtesting + trade markers
+  // -------------------------------------------------------------------------
+
+  /** Run a strategy backtest over the loaded bars (replay cut respected). */
+  executeBacktest(config: BacktestConfig): BacktestResult {
+    const len = this.effectiveLength();
+    if (len < 2) throw new Error('Not enough bars for a backtest');
+    const result = runBacktest(
+      {
+        times: this.store.times().subarray(0, len),
+        open: this.store.open().subarray(0, len),
+        high: this.store.high().subarray(0, len),
+        low: this.store.low().subarray(0, len),
+        close: this.store.close().subarray(0, len),
+        length: len,
+      },
+      config,
+    );
+    this.lastBacktestMarkers = result.markers;
+    this.applyBacktestMarkers();
+    return result;
+  }
+
+  clearBacktest(): void {
+    this.lastBacktestMarkers = [];
+    this.applyBacktestMarkers();
+  }
+
+  /** Replay-aware: markers past the cut are hidden while time is frozen. */
+  private applyBacktestMarkers(): void {
+    if (!this.adapter) return;
+    if (this.replay) {
+      const cutTime = this.store.timeAt(this.replay.index);
+      this.adapter.setTradeMarkers(this.lastBacktestMarkers.filter((m) => m.time <= cutTime));
+    } else {
+      this.adapter.setTradeMarkers(this.lastBacktestMarkers);
+    }
+  }
+
+  /** Programmatically add a horizontal-line drawing at `price`. */
+  createHorizontalLine(price: number): void {
+    const time = this.store.lastTime();
+    if (Number.isNaN(price) || time === null) return;
+    this.drawings?.add('hline', [{ time, price }]);
+    this.overlay?.markDirty();
+  }
+
+  /** PNG data-URL of the visible chart (screenshot tool). */
+  screenshot(): string | null {
+    return this.adapter?.exportImage() ?? null;
   }
 
   // -------------------------------------------------------------------------
@@ -353,6 +566,7 @@ export class ChartEngine {
 
   private async load(reason: 'symbol' | 'timeframe' | 'provider' = 'symbol'): Promise<void> {
     const seq = ++this.loadSeq;
+    this.teardownReplay(false); // a full reload follows — restore is redundant
     this.clearRealtime();
     this.events.emit('loading-changed', { loading: true, reason });
     try {
@@ -509,6 +723,11 @@ export class ChartEngine {
 
   private handleBatch(batch: import('../provider-sdk/types').MarketBatch): void {
     if (!this.mounted) return;
+    // Replay mode freezes the chart: never let live bars leak past the cut.
+    if (this.replay) {
+      if (batch.quotes.length > 0) this.events.emit('quotes', { updates: batch.quotes });
+      return;
+    }
     let touched = false;
     this.tickCount += batch.trades.length + batch.barUpdates.length;
 
@@ -567,7 +786,7 @@ export class ChartEngine {
 
     const nearEdge =
       range.from <= PAGINATION_EDGE && this.store.length > 0;
-    if (nearEdge && this.hasMoreHistory && !this.loadingHistory && !this.isLoading) {
+    if (nearEdge && this.hasMoreHistory && !this.loadingHistory && !this.isLoading && !this.replay) {
       void this.loadOlderPage();
     }
   }

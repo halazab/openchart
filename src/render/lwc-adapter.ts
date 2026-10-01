@@ -19,10 +19,13 @@ import {
   LineStyle,
   PriceScaleMode,
   createChart,
+  createSeriesMarkers,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type LogicalRange,
+  type SeriesMarker,
   type SeriesType,
   type Time,
   type UTCTimestamp,
@@ -67,6 +70,14 @@ export interface CrosshairParam {
   y: number | null;
 }
 
+/** Trade marker produced by the backtest engine (rendered via LWC markers). */
+export interface TradeMarkerInput {
+  time: number;
+  price: number;
+  kind: 'entry-long' | 'entry-short' | 'exit-long' | 'exit-short';
+  text?: string;
+}
+
 export class LwcChartAdapter implements IndicatorRenderHost {
   readonly chart: IChartApi;
   private container: HTMLElement;
@@ -81,6 +92,10 @@ export class LwcChartAdapter implements IndicatorRenderHost {
   private callbacks: ChartCallbacks;
   private coordSpace: LwcCoordinateSpace;
   private currentSymbolMeta: { pricePrecision: number; minMove: number } | null = null;
+  private markersPlugin: ISeriesMarkersPluginApi<Time> | null = null;
+  private pendingMarkers: SeriesMarker<Time>[] = [];
+  /** Replay mode: series data is capped at this exclusive index (null = full). */
+  dataLengthLimit: number | null = null;
 
   constructor(container: HTMLElement, store: BarStore, callbacks: ChartCallbacks = {}) {
     this.container = container;
@@ -237,6 +252,55 @@ export class LwcChartAdapter implements IndicatorRenderHost {
     }
     this.rebuildVolume();
     this.applyFullData();
+    this.reapplyMarkers();
+  }
+
+  // -------------------------------------------------------------------------
+  // Trade markers (backtest entries/exits)
+  // -------------------------------------------------------------------------
+
+  /** Replace all trade markers (pass [] to clear). Markers survive type switches. */
+  setTradeMarkers(markers: TradeMarkerInput[]): void {
+    const mapped: SeriesMarker<Time>[] = markers
+      .slice()
+      .sort((a, b) => a.time - b.time)
+      .map((m) => this.toSeriesMarker(m));
+    this.pendingMarkers = mapped;
+    if (!this.mainSeries) return;
+    if (this.markersPlugin) {
+      this.markersPlugin.setMarkers(mapped);
+    } else {
+      this.markersPlugin = createSeriesMarkers(this.mainSeries, mapped);
+    }
+  }
+
+  private reapplyMarkers(): void {
+    // After a chart-type switch the old series (and its marker plugin) is gone.
+    this.markersPlugin = null;
+    if (!this.mainSeries || this.pendingMarkers.length === 0) return;
+    this.markersPlugin = createSeriesMarkers(this.mainSeries, this.pendingMarkers);
+  }
+
+  private toSeriesMarker(m: TradeMarkerInput): SeriesMarker<Time> {
+    switch (m.kind) {
+      case 'entry-long':
+        return { time: m.time as UTCTimestamp, position: 'belowBar', shape: 'arrowUp', color: '#26a69a', text: 'L', size: 1 };
+      case 'entry-short':
+        return { time: m.time as UTCTimestamp, position: 'aboveBar', shape: 'arrowDown', color: '#ef5350', text: 'S', size: 1 };
+      case 'exit-long':
+        return { time: m.time as UTCTimestamp, position: 'aboveBar', shape: 'circle', color: '#8b93a3', text: m.text, size: 1 };
+      case 'exit-short':
+        return { time: m.time as UTCTimestamp, position: 'belowBar', shape: 'circle', color: '#8b93a3', text: m.text, size: 1 };
+    }
+  }
+
+  /** PNG data-URL of the current chart viewport (screenshot tool). */
+  exportImage(): string | null {
+    try {
+      return this.chart.takeScreenshot().toDataURL('image/png');
+    } catch {
+      return null;
+    }
   }
 
   setSymbolMeta(meta: { pricePrecision: number; minMove: number }): void {
@@ -275,10 +339,10 @@ export class LwcChartAdapter implements IndicatorRenderHost {
     this.applyFullData();
   }
 
-  /** Full replace of main + volume data from the store. */
+  /** Full replace of main + volume data from the store (respecting replay cut). */
   applyFullData(): void {
     if (!this.mainSeries) return;
-    const n = this.store.length;
+    const n = Math.min(this.store.length, this.dataLengthLimit ?? this.store.length);
     const ha = this.chartType === 'heikin-ashi';
     const times = this.store.times();
     if (this.chartType === 'candles' || this.chartType === 'bars' || ha) {
@@ -322,11 +386,11 @@ export class LwcChartAdapter implements IndicatorRenderHost {
     }
   }
 
-  /** Realtime path — update/append the last bar only (O(1)). */
-  updateLastBar(bar: Bar): void {
+  /** Realtime path — update/append the bar at `index` (defaults to last). O(1). */
+  updateLastBar(bar: Bar, index?: number): void {
     if (!this.mainSeries) return;
     const ha = this.chartType === 'heikin-ashi';
-    const idx = this.store.length - 1;
+    const idx = index ?? this.store.length - 1;
     const time = bar.time as UTCTimestamp;
     if (this.chartType === 'candles' || this.chartType === 'bars' || ha) {
       const point = {

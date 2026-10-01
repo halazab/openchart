@@ -19,18 +19,25 @@ import { cn } from '@/lib/utils';
 
 export function SymbolSearchDialog() {
   const open = useUiStore((s) => s.symbolSearchOpen);
+  const mode = useUiStore((s) => s.symbolSearchMode);
   const setOpen = useUiStore((s) => s.setSymbolSearchOpen);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent aria-describedby={undefined} className="max-w-lg border-[#262c37] bg-[#11141a] p-0 text-[#d1d5db]">
-        {open ? <SearchBody onPick={setOpen} /> : null}
+        {open ? <SearchBody mode={mode} onPick={setOpen} /> : null}
       </DialogContent>
     </Dialog>
   );
 }
 
-function SearchBody({ onPick }: { onPick: (open: boolean) => void }) {
+function SearchBody({
+  mode,
+  onPick,
+}: {
+  mode: 'load' | 'watchlist';
+  onPick: (open: boolean) => void;
+}) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SymbolInfo[]>([]);
   const [highlight, setHighlight] = useState(0);
@@ -60,16 +67,28 @@ function SearchBody({ onPick }: { onPick: (open: boolean) => void }) {
   const pick = useMemo(
     () => (symbol: string) => {
       onPick(false);
+      if (mode === 'watchlist') {
+        // Add to watchlist (dedup) instead of loading the chart.
+        const store = useUiStore.getState();
+        const next = Array.from(new Set([symbol, ...store.watchlist]));
+        store.setWatchlist(next);
+        const engine = getChartEngine();
+        engine?.setWatchlist(next);
+        void import('@/lib/watchlist-store').then(({ saveWatchlist }) =>
+          saveWatchlist(store.providerId, next),
+        );
+        return;
+      }
       void getChartEngine()?.setSymbol(symbol);
     },
-    [onPick],
+    [onPick, mode],
   );
 
   return (
     <>
         <DialogHeader className="px-4 pb-0 pt-4">
           <DialogTitle className="text-sm font-medium text-[#8b93a3]">
-            Symbol Search
+            {mode === 'watchlist' ? 'Add Symbol to Watchlist' : 'Symbol Search'}
           </DialogTitle>
         </DialogHeader>
         <div className="px-4 pb-2">

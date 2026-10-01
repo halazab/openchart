@@ -6,10 +6,12 @@
 
 import {
   BarChart3,
+  Camera,
   CandlestickChart,
   ChartCandlestick,
   ChartLine,
   ChevronDown,
+  FlaskConical,
   Percent,
   Search,
   Sigma,
@@ -145,6 +147,9 @@ export function TopBar() {
         <span className="hidden md:inline">Indicators</span>
       </Button>
 
+      <StrategyButton />
+      <ScreenshotButton />
+
       <div className="flex-1" />
 
       <button
@@ -177,6 +182,48 @@ export function TopBar() {
       <WatchlistToggle />
       <SettingsButton />
     </header>
+  );
+}
+
+function StrategyButton() {
+  const open = useUiStore((s) => s.strategyOpen);
+  const setOpen = useUiStore((s) => s.setStrategyOpen);
+  return (
+    <button
+      onClick={() => setOpen(!open)}
+      aria-pressed={open}
+      title="Strategy Tester (backtest)"
+      className={cn(
+        'flex h-8 items-center gap-1.5 rounded px-2 text-[12px] transition-colors',
+        open ? 'bg-[#262c37] text-[#e6e9ef]' : 'text-[#d1d5db] hover:bg-[#161a22]',
+      )}
+    >
+      <FlaskConical className="h-4 w-4" />
+      <span className="hidden md:inline">Strategy</span>
+    </button>
+  );
+}
+
+function ScreenshotButton() {
+  const download = () => {
+    const engine = getChartEngine();
+    const dataUrl = engine?.screenshot();
+    if (!dataUrl) return;
+    const a = document.createElement('a');
+    const symbol = useUiStore.getState().symbol.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    a.href = dataUrl;
+    a.download = `openchart-${symbol}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.png`;
+    a.click();
+  };
+  return (
+    <button
+      onClick={download}
+      title="Export chart image (PNG)"
+      className="flex h-8 items-center rounded px-2 text-[#8b93a3] hover:bg-[#161a22] hover:text-[#d1d5db]"
+      aria-label="Export chart image"
+    >
+      <Camera className="h-4 w-4" />
+    </button>
   );
 }
 

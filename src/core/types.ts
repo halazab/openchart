@@ -116,6 +116,8 @@ export type EngineEvents = {
   'quotes': { updates: Quote[] };
   /** Perf stats, emitted ~2×/second (status bar). */
   'stats': { fps: number; ticksPerSec: number; bars: number; hasMoreHistory: boolean };
+  /** Bar replay state changed (enter/exit/step/play/speed). */
+  'replay-changed': { active: boolean; index: number; total: number; playing: boolean; speed: number };
 }
 
 export type DisplaySettingKey =

@@ -50,3 +50,22 @@ Work Log:
 
 Stage Summary:
 - The platform now contains ZERO mock/simulated data: every bar, quote and tick comes from real providers (Binance public REST+WS, TradingView bridge). Plugin contract unchanged for future community providers.
+
+---
+Task ID: 4
+Agent: main (Super Z)
+Task: TradingView-parity behaviors — bar replay, strategy backtester, watchlist/tools upgrade
+
+Work Log:
+- New src/backtest/ package (framework-agnostic): 4 built-in strategies (EMA Cross, RSI Reversion, MACD Cross, Bollinger Reversion) with param schemas; execution engine with honest semantics — signals on bar close, fills at NEXT bar open, intrabar SL/TP (stop-first pessimism), commission both sides, compounding equity; stats (net/buy&hold/win rate/profit factor/max DD/expectancy) + equity curve + markers.
+- Bar replay in ChartEngine: enterReplay(fromIndex)/replayStep(±n)/play/pause/setReplaySpeed(0.5-10x)/exitReplay; replay cut hides future bars via adapter.dataLengthLimit; indicator deps now read effectiveLength() so RSI/MACD/etc. and Volume Profile compute only up to the cursor; realtime bars/trades paused while quotes stay live; pagination disabled during replay; any symbol/TF/provider load tears replay down; new 'replay-changed' event.
+- Renderer: createSeriesMarkers (LWC v5) for backtest entries (L/S arrows) and exits (circle + P&L text), markers survive chart-type switches and replay cuts; takeScreenshot → PNG export; updateLastBar(bar, index?) for replay appends.
+- Bar-close countdown label (imperative 500ms loop, hidden during replay/stale feeds) positioned under the last-price label.
+- UI: Strategy Tester bottom panel (strategy select, params, long-only/long-short, commission, SL/TP, Run/Clear; metrics grid + trades table + canvas equity sparkline; "replay range" badge when testing a replay window); floating replay toolbar (exit/step/play/speeds + imperative cursor position and bar time); chart right-click context menu (horizontal line at price, replay from here, copy price, reset view).
+- Watchlist upgrade: add via "+" (symbol search in add-to-watchlist mode), hover × remove, green/red tick flash (imperative), per-provider localStorage persistence (registry boot + provider switch now prefer the saved list).
+- Shortcuts: Alt+R toggle replay (enters 300 bars from end), ←/→ or ,/. step, space play/pause; replay-aware undo/redo unaffected.
+- BUG FIX (pre-existing): Binance combined-socket fan-out misattributed quotes — every handler processed ALL miniTicker frames, scrambling watchlist prices across symbols (all rows showed the same value). Fixed by matching the handler's stream name in bars() and quotes(); verified per-symbol prices now correct (BTC 84,004 / ETH 2,706 / SOL 118 / DOGE 0.10).
+- Verified E2E via gateway :81: backtest ran on 3000 real BTCUSD 1m bars (56 trades, markers 112, stats rendered); replay from context menu (cut 2923/3000), step ×2, play at 5× advanced exactly 15 bars in 3s, exit restored full data; replay-aware backtest hides markers past the cut; watchlist add/remove persisted across reload; countdown live (00:17→); screenshot returns PNG; tsc + eslint clean.
+
+Stage Summary:
+- The platform now has TradingView-style manual-testing behaviors: bar replay + strategy backtesting + trade markers + countdown + context menu + PNG export; watchlist is fully editable and persistent; one real data-integrity bug (quote misattribution) found and fixed.

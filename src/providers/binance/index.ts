@@ -336,7 +336,8 @@ export class BinanceMarketProvider implements MarketDataProvider {
         const pair = BY_SYMBOL.get(symbol);
         if (!pair) throw new Error(`Unknown Binance symbol: ${symbol}`);
         const stream = `${pair.pair}@kline_${TF_TO_BINANCE[timeframe]}`;
-        return this.socket.addStream(stream, (_s, payload) => {
+        return this.socket.addStream(stream, (s, payload) => {
+          if (s !== stream) return; // combined socket fans ALL streams out
           const msg = payload as KlineMsg;
           if (!msg || msg.e !== 'kline') return;
           const k = msg.k;
@@ -368,7 +369,8 @@ export class BinanceMarketProvider implements MarketDataProvider {
           if (!pair) continue;
           const stream = `${pair.pair}@miniTicker`;
           unsubs.push(
-            this.socket.addStream(stream, (_s, payload) => {
+            this.socket.addStream(stream, (s, payload) => {
+              if (s !== stream) return; // combined socket fans ALL streams out
               const msg = payload as MiniTickerMsg;
               if (!msg || msg.e !== '24hrMiniTicker') return;
               const quote: Quote = {

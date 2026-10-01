@@ -1,16 +1,19 @@
 'use client';
 
 /**
- * Watchlist panel — symbol rows with live prices.
+ * Watchlist panel — symbol rows with live prices, add/remove and
+ * per-provider persistence (localStorage via watchlist-store).
  *
  * IMPORTANT: quote updates are applied imperatively via refs; React only
  * re-renders when the row SET changes, never on ticks.
  */
 
 import { useEffect, useRef } from 'react';
+import { Plus, X } from 'lucide-react';
 import { getChartEngine } from './chart-workspace';
 import type { ChartEngine } from '@/core/chart-engine';
 import { useUiStore } from '@/lib/ui-store';
+import { saveWatchlist } from '@/lib/watchlist-store';
 import type { Quote } from '@/provider-sdk/types';
 import { cn } from '@/lib/utils';
 
@@ -18,12 +21,24 @@ interface RowState {
   last: number;
   prevClose: number | null;
   precision: number;
+  flashTimer: ReturnType<typeof setTimeout> | null;
+}
+
+/** Mutate the watchlist everywhere (engine, store, persistence). */
+function commitWatchlist(symbols: string[]): void {
+  const deduped = Array.from(new Set(symbols));
+  const engine = getChartEngine();
+  engine?.setWatchlist(deduped);
+  useUiStore.getState().setWatchlist(deduped);
+  saveWatchlist(useUiStore.getState().providerId, deduped);
 }
 
 export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
   const symbol = useUiStore((s) => s.symbol);
   const storeWatchlist = useUiStore((s) => s.watchlist);
   const setOpen = useUiStore((s) => s.setWatchlistOpen);
+  const setSearchMode = useUiStore((s) => s.setSymbolSearchMode);
+  const setSearchOpen = useUiStore((s) => s.setSymbolSearchOpen);
   const rowsRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const stateRef = useRef<Map<string, RowState>>(new Map());
@@ -34,7 +49,7 @@ export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
     if (!el) return;
     let state = stateRef.current.get(quote.symbol);
     if (!state) {
-      state = { last: quote.last, prevClose: quote.dayOpen ?? quote.prevClose ?? null, precision: 2 };
+      state = { last: quote.last, prevClose: quote.dayOpen ?? quote.prevClose ?? null, precision: 2, flashTimer: null };
       stateRef.current.set(quote.symbol, state);
     }
     if (quote.dayOpen !== undefined) state.prevClose = quote.dayOpen;
@@ -51,6 +66,17 @@ export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
       chgEl.textContent = `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`;
       chgEl.style.color = color;
     }
+    // Tick flash (imperative; no React re-render).
+    if (!state.flashTimer) {
+      el.style.transition = 'none';
+      el.style.backgroundColor = color === '#26a69a' ? 'rgba(38, 166, 154, 0.10)' : 'rgba(239, 83, 80, 0.10)';
+      state.flashTimer = setTimeout(() => {
+        el.style.transition = 'background-color 420ms ease-out';
+        el.style.backgroundColor = 'transparent';
+        const s = stateRef.current.get(quote.symbol);
+        if (s) s.flashTimer = null;
+      }, 90);
+    }
   };
 
   // Subscribe to quote events (throttled upstream by the batching layer).
@@ -63,6 +89,11 @@ export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
     });
   }, [engine]);
 
+  const removeSymbol = (s: string) => {
+    commitWatchlist(storeWatchlist.filter((w) => w !== s));
+    stateRef.current.delete(s);
+  };
+
   return (
     <aside
       aria-label="Watchlist"
@@ -72,50 +103,76 @@ export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
         <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8b93a3]">
           Watchlist
         </span>
-        <button
-          onClick={() => setOpen(false)}
-          className="text-[10px] text-[#585f6d] hover:text-[#8b93a3]"
-          aria-label="Hide watchlist"
-        >
-          hide
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setSearchMode('watchlist');
+              setSearchOpen(true);
+            }}
+            className="text-[#8b93a3] hover:text-[#e6e9ef]"
+            aria-label="Add symbol to watchlist"
+            title="Add symbol"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            className="text-[10px] text-[#585f6d] hover:text-[#8b93a3]"
+            aria-label="Hide watchlist"
+          >
+            hide
+          </button>
+        </div>
       </div>
       <div ref={rowsRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex items-center px-3 py-1.5 text-[10px] uppercase tracking-wide text-[#585f6d]">
           <span className="flex-1">Symbol</span>
           <span className="w-20 text-right">Last</span>
           <span className="w-16 text-right">Chg%</span>
+          <span className="w-4" />
         </div>
         {watchlist.map((s) => (
-          <button
+          <div
             key={s}
-            ref={(el) => {
-              if (el) rowRefs.current.set(s, el);
-              else rowRefs.current.delete(s);
-            }}
-            onClick={() => {
-              void getChartEngine()?.setSymbol(s);
-            }}
             className={cn(
-              'flex w-full items-center px-3 py-2 text-left text-[12px] hover:bg-[#161b23]',
+              'group relative flex w-full items-center',
               s === symbol && 'bg-[#1a2029]',
             )}
           >
-            <span
-              className={cn(
-                'flex-1 truncate font-mono font-semibold',
-                s === symbol ? 'text-[#e3b341]' : 'text-[#d1d5db]',
-              )}
+            <button
+              ref={(el) => {
+                if (el) rowRefs.current.set(s, el);
+                else rowRefs.current.delete(s);
+              }}
+              onClick={() => {
+                void getChartEngine()?.setSymbol(s);
+              }}
+              className="flex min-w-0 flex-1 items-center px-3 py-2 text-left text-[12px] hover:bg-[#161b23]"
             >
-              {s.includes(':') ? s.split(':').pop() : s}
-            </span>
-            <span data-field="last" className="w-20 text-right font-mono text-[11.5px] text-[#d1d5db]">
-              —
-            </span>
-            <span data-field="chg" className="w-16 text-right font-mono text-[11px] text-[#585f6d]">
-              —
-            </span>
-          </button>
+              <span
+                className={cn(
+                  'flex-1 truncate font-mono font-semibold',
+                  s === symbol ? 'text-[#e3b341]' : 'text-[#d1d5db]',
+                )}
+              >
+                {s.includes(':') ? s.split(':').pop() : s}
+              </span>
+              <span data-field="last" className="w-20 text-right font-mono text-[11.5px] text-[#d1d5db]">
+                —
+              </span>
+              <span data-field="chg" className="w-16 text-right font-mono text-[11px] text-[#585f6d]">
+                —
+              </span>
+            </button>
+            <button
+              onClick={() => removeSymbol(s)}
+              className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-0.5 text-[#585f6d] hover:bg-[#262c37] hover:text-[#ef5350] group-hover:block"
+              aria-label={`Remove ${s} from watchlist`}
+              title="Remove"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
         ))}
       </div>
       <SymbolDetails engine={engine} />
