@@ -17,7 +17,7 @@
 
 import type { CoordinateSpace, StoreView } from '../render/coordinate-space';
 import type { DrawingToolId } from '../core/types';
-import type { DrawingAnchor, DrawingObject } from './types';
+import { expandPositionPoints, isPositionKind, type DrawingAnchor, type DrawingObject } from './types';
 import { handlePositions, project } from './geometry';
 import type { DrawingManager } from './manager';
 
@@ -90,7 +90,13 @@ export class DrawingInteractions {
       if (preview.length < this.phase.required && this.liveAnchor) {
         preview.push(this.liveAnchor);
       }
-      this.mgr.setPreview(this.phase.kind, preview);
+      // Position tools preview the fully-expanded risk/reward plan so the
+      // box looks identical to the committed object from the first click.
+      const expanded =
+        isPositionKind(this.phase.kind) && preview.length > 0
+          ? expandPositionPoints(this.phase.kind, preview, this.barSpacingSec())
+          : null;
+      this.mgr.setPreview(this.phase.kind, expanded ?? preview);
       return;
     }
 
@@ -161,12 +167,25 @@ export class DrawingInteractions {
     }
   };
 
+  private onDoubleClick = (event: MouseEvent) => {
+    if (this.disposed) return;
+    const { x, y } = this.relative(event);
+    const hit = this.mgr.hitTest(x, y);
+    if (hit && hit.drawing.kind === 'text') {
+      event.stopPropagation();
+      event.preventDefault();
+      this.mgr.select(hit.drawing.id);
+      this.mgr.requestTextEdit(hit.drawing.id);
+    }
+  };
+
   constructor(mgr: DrawingManager, container: HTMLElement, coords: CoordinateSpace, view: StoreView) {
     this.mgr = mgr;
     this.container = container;
     this.coords = coords;
     this.view = view;
     container.addEventListener('pointerdown', this.onPointerDownCapture, true);
+    container.addEventListener('dblclick', this.onDoubleClick);
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('keydown', this.onKeyDown);
@@ -175,6 +194,7 @@ export class DrawingInteractions {
   dispose(): void {
     this.disposed = true;
     this.container.removeEventListener('pointerdown', this.onPointerDownCapture, true);
+    this.container.removeEventListener('dblclick', this.onDoubleClick);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('keydown', this.onKeyDown);
@@ -200,6 +220,16 @@ export class DrawingInteractions {
     const time = this.coords.xToTime(x) ?? 0;
     const price = this.coords.yToPrice(y) ?? 0;
     return { time, price };
+  }
+
+  /** Approximate bar spacing (seconds) used for default plan widths. */
+  private barSpacingSec(): number {
+    const n = this.view.length();
+    if (n >= 2) {
+      const spacing = this.view.timeAt(n - 1) - this.view.timeAt(n - 2);
+      if (spacing > 0) return spacing;
+    }
+    return 1800;
   }
 
   private beginCreation(tool: Exclude<DrawingToolId, 'cursor'>, x: number, y: number): void {
@@ -252,6 +282,9 @@ export class DrawingInteractions {
         case 'vline':
           next[0] = { time: before[0].time + dt, price: before[0].price };
           break;
+        case 'horizontal-ray':
+          next[0] = { time: before[0].time, price: before[0].price + dp };
+          break;
         case 'pricerange':
           next[0] = { ...next[0], price: before[0].price + dp };
           next[1] = { ...next[1], price: before[1].price + dp };
@@ -284,6 +317,9 @@ export class DrawingInteractions {
       case 'daterange':
         next[i] = { time: pointer.time, price: next[i].price };
         break;
+      case 'long-position':
+      case 'short-position':
+        return dragPositionHandle(obj, next, i, dt, dp, pointer);
       default:
         next[i] = {
           time: pointer.time,
@@ -292,4 +328,32 @@ export class DrawingInteractions {
     }
     return next;
   }
+}
+
+/**
+ * Position-tool handle semantics:
+ *  - entry handle (0): moves the WHOLE plan (price + time), like TV.
+ *  - stop/target handles (1/2): set that level's price; both right-edge
+ *    anchors share the same time so the plan width follows the drag.
+ */
+function dragPositionHandle(
+  obj: DrawingObject,
+  next: DrawingAnchor[],
+  handle: number,
+  dt: number,
+  dp: number,
+  pointer: { time: number; price: number },
+): DrawingAnchor[] {
+  void obj;
+  if (handle === 0) {
+    for (let k = 0; k < next.length; k++) {
+      next[k] = { time: next[k].time + dt, price: next[k].price + dp };
+    }
+    return next;
+  }
+  next[handle] = { time: pointer.time, price: pointer.price };
+  // Keep the right edge shared between stop and target.
+  const other = handle === 1 ? 2 : 1;
+  next[other] = { time: pointer.time, price: next[other].price };
+  return next;
 }

@@ -69,3 +69,23 @@ Work Log:
 
 Stage Summary:
 - The platform now has TradingView-style manual-testing behaviors: bar replay + strategy backtesting + trade markers + countdown + context menu + PNG export; watchlist is fully editable and persistent; one real data-integrity bug (quote misattribution) found and fixed.
+
+---
+Task ID: 5
+Agent: main (Super Z)
+Task: Add Long/Short Position tools + other TradingView drawing tools
+
+Work Log:
+- Extended DrawingToolId with 10 new tools: long-position, short-position, arrow, extended-line, horizontal-ray, cross-line, triangle, ellipse, pitchfork, text (src/core/types.ts) + new 'text-edit-requested' engine event.
+- Object model (drawings/types.ts): TOOL_POINT_COUNT for all kinds; optional `text` field on DrawingObject/SerializedDrawing (backward-compatible deserialize); position-tool anchor model — commits from 2 clicks, expands to [entry(left edge), stop(right edge), target(right edge)] via expandPositionPoints with TV-default 1% risk / 2% reward, 25-bar default width derived from live bar spacing.
+- Renderer (drawings/render.ts): direction-agnostic position tool (green profit zone entry↔target, red loss zone entry↔stop, dashed blue entry line, title tag colored by style.color, centered R/R ratio label, Target/Entry/Stop labels with signed delta + %); arrow with filled arrowhead; extended line (infinite both ways); horizontal ray with price label; cross line; triangle; ellipse (filled/stroked); Andrews' pitchfork (pivot + 2 prongs + median, all extended forward, optional fill); text with dark backing box.
+- Hit-testing (drawings/geometry.ts): rect-edge distance for positions, segment/ray math for new lines, triangle edges, sampled ellipse perimeter, pitchfork rays, text bounding box.
+- Interactions (drawings/interactions.ts): position preview renders the fully-expanded plan from the first click; handle semantics — entry handle moves the WHOLE plan, stop/target handles set their price and share the right-edge time (plan width follows); horizontal-ray body drags price-only; double-click on a text annotation re-opens the inline editor.
+- Manager (drawings/manager.ts): commitCreation expands position kinds; updateText (history-aware); requestTextEdit bridge; onRequestTextEdit option wired to the engine event.
+- Toolbar rebuilt TradingView-style: 5 groups (Lines & Rays ×8, Shapes ×3, Ranges ×2, Fib & Channels ×3, Positions ×2) with flyout menus; group buttons show the last-used tool icon; cursor + text stay flat; position tools have green/red icon accents; menuitemradio a11y pattern.
+- New TextEditPopover (React) mounted with engine prop (fix: mount-effect ran before engine existed — child effects run first); Enter/blur commits, empty commit removes; positioned at the anchor's screen coords.
+- README updated: 19-tool drawing engine section + architecture diagram.
+- E2E via gateway :81 on real Binance BTCUSD 1m: all 10 tools placed, rendered, dragged (entry-handle drag moves all 3 anchors by identical delta), undone/redone, deleted, recolored via style popover, persisted across reload (long/short-position survive); flyout menus verified visually; trendline regression pass; strategy panel unaffected; zero console errors; tsc + eslint clean; BarStore stress test ALL PASS.
+
+Stage Summary:
+- The drawing engine now covers the TradingView core toolbox (19 tools) including risk/reward position planners for manual trade planning, with a TV-like grouped toolbar. Position tools, text annotations and all new shapes persist per symbol and survive reloads.

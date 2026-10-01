@@ -22,6 +22,7 @@ import { SymbolSearchDialog } from './symbol-search';
 import { IndicatorDialog } from './indicator-dialog';
 import { SettingsPopover } from './settings-popover';
 import { SelectionStylePopover } from './selection-style-popover';
+import { TextEditPopover } from './text-edit-popover';
 import { StrategyPanel } from './strategy-panel';
 import { ReplayToolbar } from './replay-toolbar';
 import { ChartContextMenu } from './chart-context-menu';
@@ -215,6 +216,7 @@ export function ChartWorkspace() {
           <ReplayToolbar />
           <SettingsPopover />
           <SelectionStylePopover />
+          <TextEditPopover engine={engine} />
         </main>
         {watchlistOpen ? <WatchlistPanel engine={engine} /> : null}
       </div>

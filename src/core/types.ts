@@ -69,15 +69,31 @@ export type ConnectionStatus =
 /** Tool id for the drawing toolbar. `cursor` means "select/pan" mode. */
 export type DrawingToolId =
   | 'cursor'
+  // Lines & rays
   | 'trendline'
   | 'ray'
+  | 'extended-line'
+  | 'arrow'
+  | 'horizontal-ray'
   | 'hline'
   | 'vline'
+  | 'cross-line'
+  // Shapes
   | 'rectangle'
+  | 'triangle'
+  | 'ellipse'
+  // Ranges & levels
   | 'pricerange'
   | 'daterange'
+  // Fib & channels
   | 'fib'
-  | 'channel';
+  | 'pitchfork'
+  | 'channel'
+  // Position planning
+  | 'long-position'
+  | 'short-position'
+  // Annotation
+  | 'text';
 
 /** Monotonic engine event names used by `TypedEmitter`. */
 import type { SymbolInfo, Quote } from '../provider-sdk/types';
@@ -110,6 +126,8 @@ export type EngineEvents = {
   'drawings-changed': { source: string };
   /** Selection state of a drawing changed. */
   'selection-changed': { drawingId: string | null };
+  /** A freshly placed text annotation requests an inline editor. */
+  'text-edit-requested': { drawingId: string };
   /** Indicator instances changed. */
   'indicators-changed': { reason: 'add' | 'remove' | 'toggle' };
   /** Watchlist quote snapshot (throttled by the batching layer). */

@@ -95,6 +95,83 @@ function bodyDistance(
       // Distance to the ray from pts[0] through pts[1] (infinite forward).
       return distanceToRay(x, y, pts[0], pts[1]);
     }
+    case 'extended-line': {
+      // Infinite in both directions: forward + backward rays.
+      return Math.min(
+        distanceToRay(x, y, pts[0], pts[1]),
+        distanceToRay(x, y, pts[1], pts[0]),
+      );
+    }
+    case 'arrow': {
+      return distanceToSegment(x, y, pts[0].x, pts[0].y, pts[1].x, pts[1].y);
+    }
+    case 'horizontal-ray': {
+      // Right of the origin: the usual line distance; left of it: distance
+      // to the origin point itself.
+      if (x >= pts[0].x) return Math.abs(y - pts[0].y);
+      return Math.hypot(x - pts[0].x, y - pts[0].y);
+    }
+    case 'cross-line': {
+      return Math.min(Math.abs(x - pts[0].x), Math.abs(y - pts[0].y));
+    }
+    case 'triangle': {
+      const d1 = distanceToSegment(x, y, pts[0].x, pts[0].y, pts[1].x, pts[1].y);
+      const d2 = distanceToSegment(x, y, pts[1].x, pts[1].y, pts[2].x, pts[2].y);
+      const d3 = distanceToSegment(x, y, pts[2].x, pts[2].y, pts[0].x, pts[0].y);
+      return Math.min(d1, d2, d3);
+    }
+    case 'ellipse': {
+      const cx = (pts[0].x + pts[1].x) / 2;
+      const cy = (pts[0].y + pts[1].y) / 2;
+      const rx = Math.abs(pts[1].x - pts[0].x) / 2;
+      const ry = Math.abs(pts[1].y - pts[0].y) / 2;
+      if (rx < 1 || ry < 1) return Infinity;
+      const nx = (x - cx) / rx;
+      const ny = (y - cy) / ry;
+      const r = Math.hypot(nx, ny);
+      if (r <= 1) return Math.min(0.5, (1 - r) * Math.min(rx, ry));
+      // Approximate boundary distance by walking to the nearest sampled
+      // perimeter point (24 samples is plenty at hit tolerances).
+      let best = Infinity;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        best = Math.min(best, Math.hypot(x - (cx + rx * Math.cos(a)), y - (cy + ry * Math.sin(a))));
+      }
+      return best;
+    }
+    case 'pitchfork': {
+      const pivot = pts[0];
+      const m = { x: (pts[1].x + pts[2].x) / 2, y: (pts[1].y + pts[2].y) / 2 };
+      const dir = { x: m.x - pivot.x, y: m.y - pivot.y };
+      const prong = (from: ProjectedPoint) =>
+        distanceToRay(x, y, from, { x: from.x + dir.x, y: from.y + dir.y });
+      return Math.min(
+        distanceToRay(x, y, pivot, m),
+        prong(pts[1]),
+        prong(pts[2]),
+      );
+    }
+    case 'long-position':
+    case 'short-position': {
+      // Whole plan rect: entry's left edge → stop/target right edge, spanning
+      // from the topmost to the bottommost level.
+      const left = Math.min(pts[0].x, Math.min(pts[1].x, pts[2].x));
+      const right = Math.max(pts[0].x, Math.max(pts[1].x, pts[2].x));
+      const top = Math.min(pts[0].y, Math.min(pts[1].y, pts[2].y));
+      const bottom = Math.max(pts[0].y, Math.max(pts[1].y, pts[2].y));
+      return distanceToRectEdges(x, y, { x: left, y: top }, { x: right, y: bottom });
+    }
+    case 'text': {
+      const text = drawing.text ?? '';
+      const w = Math.max(text.length, 1) * 6.8 + 10;
+      const anchor = pts[0];
+      return distanceToRectEdges(
+        x,
+        y,
+        { x: anchor.x, y: anchor.y - 9 },
+        { x: anchor.x + w, y: anchor.y + 9 },
+      );
+    }
     case 'channel': {
       const d1 = distanceToSegment(x, y, pts[0].x, pts[0].y, pts[1].x, pts[1].y);
       const off = offsetVector(pts[0], pts[2]);

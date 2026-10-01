@@ -58,9 +58,19 @@ building block. No proprietary SDKs, no embedded TradingView widgets.
   [docs/indicator-plugins.md](docs/indicator-plugins.md)
 
 ### Drawing engine
-- **Trend line, horizontal line, vertical line, ray, rectangle, price range,
-  date range, Fibonacci retracement, parallel channel**
+- **19 tools** — trend line, ray, extended line, arrow, horizontal ray,
+  horizontal line, vertical line, cross line, rectangle, triangle, ellipse,
+  price range, date range, Fibonacci retracement, Andrews' pitchfork,
+  parallel channel, **long position, short position**, text annotation
+- **Long/Short Position planners** — TradingView-style risk/reward boxes:
+  entry/stop/target levels (default 1% risk / 2% reward, R/R label),
+  profit (green) and loss (red) zones, entry handle moves the whole plan,
+  stop/target handles resize their level and the plan width
+- **Grouped toolbar with flyout menus** — click a group (lines & rays,
+  shapes, ranges, fib & channels, positions) to pick a tool; the button
+  remembers the last-used tool, exactly like TradingView
 - Selection, dragging, resizing (endpoint/corner handles), delete
+- **Text annotations** — inline editor on placement, double-click to re-edit
 - Per-object style properties (color / width / dash) via floating editor
 - **Right-click context menu** — horizontal line at price, replay from
   this bar, copy price, reset view
@@ -68,6 +78,7 @@ building block. No proprietary SDKs, no embedded TradingView widgets.
 - **PNG export** (camera button) of the visible chart
 - **Serialization** to versioned JSON, **restoration** (per-symbol localStorage)
 - **Undo/redo** (command stack, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y)
+- **Magnet mode** snapping anchors to OHLC
 - **Zero coupling to Lightweight Charts internals** — drawings live in
   time/price space and project through a `CoordinateSpace` interface
   (see "The adapter seam" below)
@@ -126,7 +137,7 @@ status bar for the full multi-exchange universe (stocks, indices, forex).
 │   typed event bus · display settings · symbol/TF lifecycle         │
 ├──────────────┬───────────────────┬─────────────────┬───────────────┤
 │ data-engine  │ indicator-engine  │ drawing-engine  │ chart-renderer│
-│ BarStore     │ plugin API        │ 9 tools         │ LWC adapter   │
+│ BarStore     │ plugin API        │ 19 tools        │ LWC adapter   │
 │ (typed cols) │ registry          │ hit-testing     │ overlay canvas│
 │ pagination   │ worker scheduler  │ command stack   │ CoordinateSpace│
 └──────┬───────┴─────────┬─────────┴────────┬────────┴───────┬───────┘

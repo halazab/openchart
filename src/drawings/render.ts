@@ -14,6 +14,11 @@ import { TOOL_POINT_COUNT, type DrawingObject } from './types';
 
 const HANDLE_SIZE = 7;
 
+/** TradingView-style position-tool palette. */
+const POSITION_PROFIT = '#26a69a';
+const POSITION_LOSS = '#ef5350';
+const POSITION_ENTRY = '#2962ff';
+
 function applyStroke(ctx: CanvasRenderingContext2D, obj: DrawingObject, selected: boolean): void {
   ctx.strokeStyle = selected ? CHART_THEME.drawingSelected : obj.style.color;
   ctx.fillStyle = ctx.strokeStyle;
@@ -115,6 +120,155 @@ function drawShape(
       ctx.moveTo(pts[0].x, pts[0].y);
       ctx.lineTo(pts[0].x + (dx / len) * big, pts[0].y + (dy / len) * big);
       ctx.stroke();
+      break;
+    }
+    case 'extended-line': {
+      applyStroke(ctx, obj, selected);
+      const dx = pts[1].x - pts[0].x;
+      const dy = pts[1].y - pts[0].y;
+      const len = Math.hypot(dx, dy) || 1;
+      const big = 5000;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x - (dx / len) * big, pts[0].y - (dy / len) * big);
+      ctx.lineTo(pts[0].x + (dx / len) * big, pts[0].y + (dy / len) * big);
+      ctx.stroke();
+      break;
+    }
+    case 'arrow': {
+      applyStroke(ctx, obj, selected);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      ctx.lineTo(pts[1].x, pts[1].y);
+      ctx.stroke();
+      drawArrowHead(ctx, pts[0], pts[1], 9 + obj.style.lineWidth * 1.5, obj.style.color);
+      break;
+    }
+    case 'horizontal-ray': {
+      applyStroke(ctx, obj, selected);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      ctx.lineTo(ctx.canvas.width, pts[0].y);
+      ctx.stroke();
+      drawLabel(ctx, ctx.canvas.width - 4, pts[0].y, formatPrice(obj.points[0].price, 2), obj.style.color);
+      break;
+    }
+    case 'cross-line': {
+      applyStroke(ctx, obj, selected);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, 0);
+      ctx.lineTo(pts[0].x, ctx.canvas.height);
+      ctx.moveTo(0, pts[0].y);
+      ctx.lineTo(ctx.canvas.width, pts[0].y);
+      ctx.stroke();
+      break;
+    }
+    case 'triangle': {
+      if (obj.style.fill) {
+        ctx.save();
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = obj.style.color;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.lineTo(pts[2].x, pts[2].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      applyStroke(ctx, obj, selected);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      ctx.lineTo(pts[1].x, pts[1].y);
+      ctx.lineTo(pts[2].x, pts[2].y);
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    }
+    case 'ellipse': {
+      const cx = (pts[0].x + pts[1].x) / 2;
+      const cy = (pts[0].y + pts[1].y) / 2;
+      const rx = Math.abs(pts[1].x - pts[0].x) / 2;
+      const ry = Math.abs(pts[1].y - pts[0].y) / 2;
+      if (rx < 1 || ry < 1) break;
+      if (obj.style.fill) {
+        ctx.save();
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = obj.style.color;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      applyStroke(ctx, obj, selected);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'pitchfork': {
+      applyStroke(ctx, obj, selected);
+      const pivot = pts[0];
+      const m = { x: (pts[1].x + pts[2].x) / 2, y: (pts[1].y + pts[2].y) / 2 };
+      const dir = { x: m.x - pivot.x, y: m.y - pivot.y };
+      const len = Math.hypot(dir.x, dir.y) || 1;
+      const big = 5000;
+      const extend = (from: Projection['pts'][number]) => ({
+        x: from.x + (dir.x / len) * big,
+        y: from.y + (dir.y / len) * big,
+      });
+      const aEnd = extend(pts[1]);
+      const bEnd = extend(pts[2]);
+      const mEnd = extend(m);
+      ctx.beginPath();
+      ctx.moveTo(pts[1].x, pts[1].y);
+      ctx.lineTo(aEnd.x, aEnd.y);
+      ctx.moveTo(pts[2].x, pts[2].y);
+      ctx.lineTo(bEnd.x, bEnd.y);
+      ctx.stroke();
+      // Median line on top, slightly thicker feel via same stroke.
+      ctx.beginPath();
+      ctx.moveTo(pivot.x, pivot.y);
+      ctx.lineTo(mEnd.x, mEnd.y);
+      ctx.stroke();
+      if (obj.style.fill) {
+        ctx.save();
+        ctx.globalAlpha = 0.06;
+        ctx.fillStyle = obj.style.color;
+        ctx.beginPath();
+        ctx.moveTo(pivot.x, pivot.y);
+        ctx.lineTo(aEnd.x, aEnd.y);
+        ctx.lineTo(bEnd.x, bEnd.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      break;
+    }
+    case 'long-position':
+    case 'short-position': {
+      drawPositionTool(ctx, obj, pts, selected);
+      break;
+    }
+    case 'text': {
+      const text = obj.text ?? '';
+      const anchor = pts[0];
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.font = '12.5px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const w = text.length > 0 ? ctx.measureText(text).width : 14;
+      if (text.length > 0) {
+        ctx.fillStyle = 'rgba(17, 20, 26, 0.85)';
+        ctx.fillRect(anchor.x, anchor.y - 9, w + 8, 18);
+        ctx.fillStyle = selected ? CHART_THEME.drawingSelected : obj.style.color;
+        ctx.fillText(text, anchor.x + 4, anchor.y);
+      } else {
+        ctx.strokeStyle = selected ? CHART_THEME.drawingSelected : obj.style.color;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(anchor.x, anchor.y - 9, w + 8, 18);
+      }
+      ctx.restore();
       break;
     }
     case 'channel': {
@@ -338,4 +492,118 @@ export function magnetSnap(
   }
   void formatUtcTime;
   return { time, price: best };
+}
+
+/** Filled triangular arrowhead pointing from `a` to `b`. */
+function drawArrowHead(
+  ctx: CanvasRenderingContext2D,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  size: number,
+  color: string,
+): void {
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const spread = Math.PI / 7;
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(b.x, b.y);
+  ctx.lineTo(b.x - size * Math.cos(angle - spread), b.y - size * Math.sin(angle - spread));
+  ctx.lineTo(b.x - size * Math.cos(angle + spread), b.y - size * Math.sin(angle + spread));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Long/Short Position tool — TradingView-style risk/reward planner.
+ *
+ * Anchors (all three, always):
+ *   [0] entry  — left edge, entry price
+ *   [1] stop   — right edge, stop price (loss zone)
+ *   [2] target — right edge, target price (profit zone)
+ * Rendering is direction-agnostic: the profit zone is always between the
+ * entry and target lines, the loss zone between entry and stop.
+ */
+function drawPositionTool(
+  ctx: CanvasRenderingContext2D,
+  obj: DrawingObject,
+  pts: Projection['pts'],
+  selected: boolean,
+): void {
+  if (pts.length < 3) return;
+  const [entry, stop, target] = pts;
+  const left = Math.min(entry.x, Math.min(stop.x, target.x));
+  const right = Math.max(entry.x, Math.max(stop.x, target.x));
+  const entryP = obj.points[0].price;
+  const stopP = obj.points[1].price;
+  const targetP = obj.points[2].price;
+  const risk = Math.abs(entryP - stopP);
+  const reward = Math.abs(targetP - entryP);
+  const rr = risk > 0 ? reward / risk : 0;
+  const pct = (p: number) => (entryP !== 0 ? ((p - entryP) / entryP) * 100 : 0);
+  const sign = (v: number) => `${v >= 0 ? '+' : ''}${formatPrice(v, 2)}`;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.clip();
+
+  // Profit zone (entry↔target) and loss zone (entry↔stop).
+  const zone = (y0: number, y1: number, color: string) => {
+    const top = Math.min(y0, y1);
+    const bottom = Math.max(y0, y1);
+    if (bottom - top < 0.5) return;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.28;
+    ctx.fillRect(left, top, right - left, bottom - top);
+    ctx.globalAlpha = 1;
+  };
+  zone(entry.y, target.y, POSITION_PROFIT);
+  zone(entry.y, stop.y, POSITION_LOSS);
+
+  const line = (y: number, color: string, dashed: boolean) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(dashed ? [5, 4] : []);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+  };
+  line(target.y, POSITION_PROFIT, false);
+  line(stop.y, POSITION_LOSS, false);
+  line(entry.y, selected ? CHART_THEME.drawingSelected : POSITION_ENTRY, true);
+
+  ctx.setLineDash([]);
+
+  // Title.
+  ctx.font = 'bold 10.5px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const title = obj.kind === 'long-position' ? 'Long Position' : 'Short Position';
+  ctx.fillStyle = 'rgba(17, 20, 26, 0.85)';
+  const titleW = ctx.measureText(title).width + 8;
+  ctx.fillRect(left + 4, entry.y - 9 - 12, titleW, 15);
+  ctx.fillStyle = selected ? CHART_THEME.drawingSelected : obj.style.color;
+  ctx.fillText(title, left + 8, entry.y - 9 - 4.5);
+
+  // R/R label in the middle of the plan.
+  drawLabel(
+    ctx,
+    (left + right) / 2,
+    entry.y,
+    `R/R 1 : ${rr.toFixed(2)}`,
+    '#d1d5db',
+    'center',
+    10,
+  );
+
+  // Level labels on the right edge (outward).
+  drawLabel(ctx, right + 4, target.y, `Target ${formatPrice(targetP, 2)}  (${sign(targetP - entryP)} / ${pct(targetP).toFixed(2)}%)`, POSITION_PROFIT, 'left', 9.5);
+  drawLabel(ctx, right + 4, entry.y, `Entry ${formatPrice(entryP, 2)}`, POSITION_ENTRY, 'left', 9.5);
+  drawLabel(ctx, right + 4, stop.y, `Stop ${formatPrice(stopP, 2)}  (${sign(stopP - entryP)} / ${pct(stopP).toFixed(2)}%)`, POSITION_LOSS, 'left', 9.5);
+
+  ctx.restore();
 }

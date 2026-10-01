@@ -19,6 +19,8 @@ import {
   deserializeDrawings,
   serializeDrawings,
   TOOL_POINT_COUNT,
+  expandPositionPoints,
+  isPositionKind,
   type DrawingAnchor,
   type DrawingKind,
   type DrawingObject,
@@ -35,6 +37,8 @@ export interface DrawingManagerOptions {
   onToolChanged?: (tool: DrawingToolId) => void;
   onHistoryChanged?: () => void;
   onDrawingsChanged?: () => void;
+  /** A freshly placed text annotation needs an inline editor. */
+  onRequestTextEdit?: (id: string) => void;
 }
 
 const STORAGE_PREFIX = 'openchart.drawings.';
@@ -248,6 +252,37 @@ export class DrawingManager {
     this.afterMutation();
   }
 
+  /** Set the text content of a text annotation (history-aware). */
+  updateText(id: string, text: string): void {
+    const obj = this.drawings.find((d) => d.id === id);
+    if (!obj || obj.kind !== 'text' || obj.text === text) return;
+    const before = obj.text;
+    const after = text;
+    const command: Command = {
+      label: 'edit text',
+      undo: () => {
+        const target = this.drawings.find((d) => d.id === id);
+        if (target) {
+          target.text = before;
+          target.updatedAt = Date.now();
+          this.afterMutation();
+        }
+      },
+      redo: () => {
+        const target = this.drawings.find((d) => d.id === id);
+        if (target) {
+          target.text = after;
+          target.updatedAt = Date.now();
+          this.afterMutation();
+        }
+      },
+    };
+    obj.text = after;
+    obj.updatedAt = Date.now();
+    this.commands.push(command);
+    this.afterMutation();
+  }
+
   // -- Geometry editing (used by interactions) ---------------------------------
 
   /** Deep-copy points for a drag session. */
@@ -314,8 +349,14 @@ export class DrawingManager {
 
   /** Called by interactions when a creation flow completes. */
   commitCreation(kind: DrawingKind, points: DrawingAnchor[]): void {
-    this.add(kind, points);
+    // Position tools commit from 2 clicks and expand into the full
+    // [entry, stop, target] plan with TV-default 1%/2% levels.
+    const finalPoints = isPositionKind(kind)
+      ? expandPositionPoints(kind, points, this.barSpacingSec())
+      : points;
+    const obj = this.add(kind, finalPoints);
     this.previewObj = null;
+    if (kind === 'text') this.opts.onRequestTextEdit?.(obj.id);
     // Return to select mode like TradingView.
     this.setTool('cursor');
   }
@@ -325,8 +366,24 @@ export class DrawingManager {
     this.opts.markDirty();
   }
 
+  /** Re-open the inline editor for an existing text annotation. */
+  requestTextEdit(id: string): void {
+    this.opts.onRequestTextEdit?.(id);
+  }
+
   pointCountFor(kind: DrawingKind): number {
     return TOOL_POINT_COUNT[kind];
+  }
+
+  /** Approximate bar spacing (seconds) for default plan sizing. */
+  private barSpacingSec(): number {
+    const view = this.opts.view;
+    const n = view.length();
+    if (n >= 2) {
+      const spacing = view.timeAt(n - 1) - view.timeAt(n - 2);
+      if (spacing > 0) return spacing;
+    }
+    return 1800;
   }
 
   // -- History ---------------------------------------------------------------------

@@ -159,6 +159,7 @@ export class ChartEngine {
       onToolChanged: (tool) => this.events.emit('tool-changed', { tool }),
       onHistoryChanged: () => this.events.emit('drawings-changed', { source: 'history' }),
       onDrawingsChanged: () => this.events.emit('drawings-changed', { source: 'change' }),
+      onRequestTextEdit: (id) => this.events.emit('text-edit-requested', { drawingId: id }),
     });
     // Register drawings as the top overlay layer.
     this.overlay.addLayer({
