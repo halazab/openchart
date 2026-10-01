@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { useUiStore } from '@/lib/ui-store';
-import { getProvider, DEFAULT_WATCHLIST } from '@/lib/provider-registry';
+import { getProvider, DEFAULT_WATCHLIST, switchProvider } from '@/lib/provider-registry';
 import { ChartEngine } from '@/core/chart-engine';
 import type { ConnectionStatus } from '@/core/types';
 import { TopBar } from './top-bar';
@@ -27,6 +27,24 @@ let engineSingleton: ChartEngine | null = null;
 
 export function getChartEngine(): ChartEngine | null {
   return engineSingleton;
+}
+
+/** Single entry point for provider switching (symbol + watchlist realignment included). */
+export async function changeProvider(providerId: string): Promise<void> {
+  const engine = engineSingleton;
+  if (!engine) return;
+  useUiStore.getState().setProviderId(providerId);
+  useUiStore.getState().setLoading(true);
+  await switchProvider(
+    async (provider, symbol) => {
+      await engine.setProvider(provider, symbol);
+    },
+    (symbols) => {
+      engine.setWatchlist(symbols);
+      useUiStore.getState().setWatchlist(symbols);
+    },
+    providerId,
+  );
 }
 
 export function ChartWorkspace() {
@@ -121,6 +139,7 @@ export function ChartWorkspace() {
     );
 
     engine.setWatchlist(DEFAULT_WATCHLIST);
+    useUiStore.getState().setWatchlist(DEFAULT_WATCHLIST);
     void engine.mount();
 
     return () => {

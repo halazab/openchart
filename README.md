@@ -61,15 +61,21 @@ building block. No proprietary SDKs, no embedded TradingView widgets.
   collapses quotes per symbol, preserves bar rollovers
 - **TradeAggregator** — folds raw trade prints into OHLCV buckets
   (exercised by the synthetic provider's tick feed)
-- Two reference providers ship in-tree:
+- Three providers ship in-tree:
   - `synthetic` — deterministic offline market simulator (equity sessions,
     extended hours, tick-level realtime; `bars()` intentionally null to
     exercise the trades→bars aggregation path)
-  - `binance` — real public market data (REST klines + combined WS streams,
-    no API key), demonstrating a production vendor adapter with
-    reconnect/backoff
+  - `binance` — real public crypto data (REST klines + combined WS streams,
+    no API key), a production vendor adapter with reconnect/backoff
+  - `tradingview` — the **full TradingView instrument universe** via
+    [`@mathieuc/tradingview`](https://github.com/Mathieu2301/TradingView-API)
+    (Mathieu2301/TradingView-API). The library is Node-only, so it runs in a
+    socket.io bridge mini-service (`mini-services/tradingview-bridge`) and the
+    browser adapter speaks the normalized provider-sdk vocabulary over the
+    gateway (`/?XTransformPort=3014`) — see "TradingView bridge" below
 - Swapping providers never touches chart/indicator/drawing code — switch
-  providers live from the status bar
+  providers live from the status bar; symbol + watchlist realign to each
+  provider's instrument universe automatically
 
 ---
 
@@ -131,7 +137,7 @@ library — they talk to narrow interfaces (`CoordinateSpace`,
 | `src/core/` | chart-core | shared types, `TypedEmitter`, math utils, `ChartEngine` facade |
 | `src/data/` | data-engine | `BarStore` (column-oriented typed arrays), pagination glue |
 | `src/provider-sdk/` | provider-sdk | contracts, `BatchingIngestor`, `TradeAggregator` |
-| `src/providers/` | provider plugins | `synthetic`, `binance` reference implementations |
+| `src/providers/` | provider plugins | `synthetic`, `binance`, `tradingview` adapters |
 | `src/indicators/` | indicator-engine | plugin API, registry, 8 built-ins, worker scheduler, instance engine |
 | `src/drawings/` | drawing-engine | model, geometry, renderer, interactions, history, manager |
 | `src/render/` | chart-renderer | LWC adapter, `CoordinateSpace`, overlay layers, legend controller |
@@ -179,6 +185,44 @@ indicators, and the UI are untouched.
 
 Load test: page backward repeatedly — the store stress script validates
 33k+ bars across 6 prepend pages (ascending times, content integrity).
+
+### TradingView bridge (`mini-services/tradingview-bridge`)
+
+The [Mathieu2301/TradingView-API](https://github.com/Mathieu2301/TradingView-API)
+library connects to TradingView's WebSocket feed from Node (custom `Origin`
+headers, guest or user tokens). Browsers cannot set those headers, so the
+integration is split exactly along the provider seam:
+
+```
+browser (TradingViewProvider)  →  gateway  →  bridge mini-service  →  TradingView
+  io('/?XTransformPort=3014')      (Caddy)     socket.io :3014          wss (Node 'ws')
+```
+
+Bridge responsibilities (`mini-services/tradingview-bridge/index.ts`):
+- one supervised guest `TradingView.Client` (reconnect + full resubscribe)
+- `tv:history` — chunked `setMarket({ to, range })` fetches with
+  settle-detection, assembled ascending, session flags inferred
+  (gap-based for equities, UTC-day for 24/7 markets)
+- `tv:subscribe-bars` — one long-lived chart session per subscription,
+  bursts coalesced to 10 Hz before broadcast
+- `tv:subscribe-quotes` — TV quote sessions for the watchlist
+  (`lp`, day OHLC, prev-close → normalized `Quote`)
+- `tv:search` / `tv:meta` — TradingView's symbol universe → `SymbolInfo`
+  (search v3 + chart `symbol_resolved` metadata; `spot` → crypto mapping)
+
+Run it (auto-reload on change):
+
+```bash
+cd mini-services/tradingview-bridge && bun run dev   # listens on :3014
+```
+
+If the bridge is down, the provider surfaces a connection error toast and
+`reconnecting` status; other providers keep working. Optional auth:
+`new TradingView.Client({ token, signature })` inside the bridge enables
+premium-data symbols (free guest accounts get standard markets).
+
+Smoke test: `bunx tsx scripts/test-tv-bridge.ts` (history, pagination
+contiguity, session flags, meta, search, realtime bars, quotes).
 
 ### Drawing persistence
 

@@ -19,6 +19,7 @@ export interface UiState {
   scaleMode: ScaleMode;
   status: ConnectionStatus;
   loading: boolean;
+  watchlist: string[];
   activeTool: DrawingToolId;
   selectedDrawingId: string | null;
   canUndo: boolean;
@@ -38,6 +39,7 @@ export interface UiState {
   setScaleMode: (m: ScaleMode) => void;
   setStatus: (s: ConnectionStatus) => void;
   setLoading: (l: boolean) => void;
+  setWatchlist: (symbols: string[]) => void;
   setActiveTool: (t: DrawingToolId) => void;
   setSelectedDrawing: (id: string | null) => void;
   setHistoryFlags: (canUndo: boolean, canRedo: boolean) => void;
@@ -57,6 +59,7 @@ export const useUiStore = create<UiState>((set) => ({
   scaleMode: 'normal',
   status: 'idle',
   loading: true,
+  watchlist: [],
   activeTool: 'cursor',
   selectedDrawingId: null,
   canUndo: false,
@@ -75,6 +78,7 @@ export const useUiStore = create<UiState>((set) => ({
   setScaleMode: (scaleMode) => set({ scaleMode }),
   setStatus: (status) => set({ status }),
   setLoading: (loading) => set({ loading }),
+  setWatchlist: (watchlist) => set({ watchlist }),
   setActiveTool: (activeTool) => set({ activeTool }),
   setSelectedDrawing: (selectedDrawingId) => set({ selectedDrawingId }),
   setHistoryFlags: (canUndo, canRedo) => set({ canUndo, canRedo }),

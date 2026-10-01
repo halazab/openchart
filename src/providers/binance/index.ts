@@ -81,6 +81,15 @@ function toSymbolInfo(p: PairSpec): SymbolInfo {
   };
 }
 
+/** Continuous markets anchor VWAP/sessions per UTC day. */
+function withDailySessionFlags(bars: Bar[], timeframe: Timeframe): Bar[] {
+  const tfSec = TIMEFRAME_SECONDS[timeframe];
+  return bars.map((b) => ({
+    ...b,
+    sessionStart: b.time % 86400 < tfSec || undefined,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket connection manager with reconnect + backoff
 // ---------------------------------------------------------------------------
@@ -315,7 +324,7 @@ export class BinanceMarketProvider implements MarketDataProvider {
         // Assemble ascending: oldest page first.
         const bars: Bar[] = [];
         for (let i = pages.length - 1; i >= 0; i--) bars.push(...pages[i]);
-        return { bars, hasMore };
+        return { bars: withDailySessionFlags(bars, timeframe), hasMore };
       },
     };
   }
@@ -330,13 +339,15 @@ export class BinanceMarketProvider implements MarketDataProvider {
           const msg = payload as KlineMsg;
           if (!msg || msg.e !== 'kline') return;
           const k = msg.k;
+          const time = Math.floor(k.t / 1000);
           handler({
-            time: Math.floor(k.t / 1000),
+            time,
             open: parseFloat(k.o),
             high: parseFloat(k.h),
             low: parseFloat(k.l),
             close: parseFloat(k.c),
             volume: parseFloat(k.v),
+            sessionStart: time % 86400 < TIMEFRAME_SECONDS[timeframe] || undefined,
           });
         });
       },

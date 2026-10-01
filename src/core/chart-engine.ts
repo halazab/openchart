@@ -268,15 +268,18 @@ export class ChartEngine {
     return this.provider.searchSymbols(query, limit);
   }
 
-  async setProvider(provider: MarketDataProvider): Promise<void> {
+  async setProvider(provider: MarketDataProvider, symbol?: string): Promise<void> {
     this.clearRealtime();
     this.provider = provider;
+    if (symbol && symbol !== this.symbol) {
+      this.symbol = symbol;
+    }
     this.provider.onStatus((status) =>
       this.events.emit('status-changed', { status, providerId: provider.id }),
     );
     await provider.connect?.();
     this.events.emit('status-changed', { status: provider.status(), providerId: provider.id });
-    if (this.mounted) await this.load();
+    if (this.mounted) await this.load('provider');
   }
 
   async setSymbol(symbol: string): Promise<void> {

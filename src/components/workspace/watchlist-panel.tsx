@@ -22,20 +22,12 @@ interface RowState {
 
 export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
   const symbol = useUiStore((s) => s.symbol);
+  const storeWatchlist = useUiStore((s) => s.watchlist);
   const setOpen = useUiStore((s) => s.setWatchlistOpen);
   const rowsRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const stateRef = useRef<Map<string, RowState>>(new Map());
-
-  // Subscribe to quote events (throttled upstream by the batching layer).
-  useEffect(() => {
-    if (!engine) return;
-    return engine.events.on('quotes', ({ updates }) => {
-      for (const quote of updates) {
-        applyQuote(quote);
-      }
-    });
-  }, [engine]);
+  const watchlist = Array.from(new Set([symbol, ...storeWatchlist]));
 
   const applyQuote = (quote: Quote) => {
     const el = rowRefs.current.get(quote.symbol);
@@ -61,8 +53,15 @@ export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
     }
   };
 
-  const symbols = useUiStore.getState();
-  const watchlist = getWatchlistSymbols(symbols.symbol);
+  // Subscribe to quote events (throttled upstream by the batching layer).
+  useEffect(() => {
+    if (!engine) return;
+    return engine.events.on('quotes', ({ updates }) => {
+      for (const quote of updates) {
+        applyQuote(quote);
+      }
+    });
+  }, [engine]);
 
   return (
     <aside
@@ -104,11 +103,11 @@ export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
           >
             <span
               className={cn(
-                'flex-1 font-mono font-semibold',
+                'flex-1 truncate font-mono font-semibold',
                 s === symbol ? 'text-[#e3b341]' : 'text-[#d1d5db]',
               )}
             >
-              {s}
+              {s.includes(':') ? s.split(':').pop() : s}
             </span>
             <span data-field="last" className="w-20 text-right font-mono text-[11.5px] text-[#d1d5db]">
               —
@@ -124,12 +123,6 @@ export function WatchlistPanel({ engine }: { engine: ChartEngine | null }) {
   );
 }
 
-// Watchlist lives on the engine (provider-agnostic); mirror the default here.
-function getWatchlistSymbols(current: string): string[] {
-  const base = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'NVDA', 'AAPL', 'TSLA', 'SPY'];
-  return Array.from(new Set([current, ...base]));
-}
-
 function formatQuote(v: number, precision: number): string {
   return v.toLocaleString('en-US', {
     minimumFractionDigits: Math.min(precision, 2),
@@ -143,6 +136,7 @@ function formatQuote(v: number, precision: number): string {
  */
 function SymbolDetails({ engine }: { engine: ChartEngine | null }) {
   const info = useUiStore((s) => s.symbolInfo);
+  const currentSymbol = useUiStore((s) => s.symbol);
   const dayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -150,7 +144,7 @@ function SymbolDetails({ engine }: { engine: ChartEngine | null }) {
     return engine.events.on('quotes', ({ updates }) => {
       const container = dayRef.current;
       if (!container) return;
-      const relevant = updates[updates.length - 1];
+      const relevant = updates.find((q) => q.symbol === useUiStore.getState().symbol);
       if (!relevant) return;
       const cells = container.querySelectorAll<HTMLElement>('[data-stat]');
       const set = (key: string, value: string) => {

@@ -1,0 +1,13 @@
+{
+  "name": "tradingview-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch index.ts"
+  },
+  "dependencies": {
+    "@mathieuc/tradingview": "^3.5.2",
+    "socket.io": "^4.8.4",
+    "tsx": "^4.23.15"
+  }
+}

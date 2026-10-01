@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChartEngine } from '@/core/chart-engine';
 import { useUiStore } from '@/lib/ui-store';
+import { changeProvider } from './chart-workspace';
 import { PROVIDERS } from '@/lib/provider-registry';
 import {
   DropdownMenu,
@@ -54,12 +55,7 @@ export function StatusBar({ engine }: { engine: ChartEngine | null }) {
 
   const pickProvider = (id: string) => {
     if (!engine) return;
-    useUiStore.getState().setProviderId(id);
-    const provider = PROVIDERS.find((p) => p.id === id);
-    if (provider) {
-      useUiStore.getState().setLoading(true);
-      void engine.setProvider(provider);
-    }
+    void changeProvider(id);
   };
 
   return (

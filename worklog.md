@@ -16,3 +16,18 @@ Work Log:
 Stage Summary:
 - Verified working: candles/bars/line/area/HA, TF+symbol switching, pagination (3000→13000 bars), SMA/RSI/MACD/BB/VP live, trendline+fib draw/drag/undo/redo/persistence, log scale, session shading (NVDA), real Binance klines+ticker streaming, watchlist quotes, 60fps.
 - tsc clean, eslint clean, dev.log clean. All 12 todos complete.
+
+---
+Task ID: 2
+Agent: main (Super Z)
+Task: Integrate Mathieu2301/TradingView-API as an additional data provider
+
+Work Log:
+- Installed @mathieuc/tradingview@3.5.2 (the npm "tradingview-api" package is an unrelated library — swapped). Mapped the real API surface from source: client.Session.Chart (setMarket {to, range}, periods newest-first with max/min as high/low), Session.Quote markets, searchMarketV3, chart.delete().
+- Built mini-services/tradingview-bridge (socket.io :3014, bun/tsx watch): supervised guest TV client with reconnect+resubscribe, chunked history fetch (settle-detection, ≤2000 bars/request, session flags: gap-based equity / UTC-day continuous), long-lived chart per bar subscription (10Hz coalesced broadcast), quote sessions for watchlists, search/meta RPCs mapped to SymbolInfo ('spot'→crypto fix from raw symbol_resolved probe).
+- Browser adapter src/providers/tradingview implements MarketDataProvider over io('/?XTransformPort=3014') with ack RPCs + stream subscriptions; provider.defaultWatchlist added to the SDK; provider switching now realigns symbol + watchlist per provider universe.
+- Debugged via probes: bun's ws shim fails TV handshake ("Expected 101") → bridge runs under node+tsx (node ws works); fetchPage merge kept only decreasing bars (backwards condition) → fixed; 1.5s settle window too short on multiplexed sessions → 3s + count-reached check; socket.io ack array-unwrap bug in test + provider; legend 8px width from a scrollbar CSS selector collision; preview drawing crash on partial anchors; details panel applied wrong symbol's quotes.
+- Verified E2E through the Caddy gateway (browser must hit :81, not :3000, for XTransformPort routing): real BINANCE:BTCUSDT 1m chart (83,9xx live), NASDAQ:TSLA, timeframe switching, TV symbol search ("tesla" → NASDAQ:TSLA), live watchlist quotes with day stats, realtime klines; regression pass on binance + synthetic providers. scripts/test-tv-bridge.ts: ALL PASS. tsc + eslint clean.
+
+Stage Summary:
+- TradingView is now a first-class pluggable provider alongside synthetic + binance; the bridge pattern is documented in README + docs/provider-interfaces.md (server-side vendor bridge section).

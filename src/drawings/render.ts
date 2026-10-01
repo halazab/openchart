@@ -10,7 +10,7 @@ import type { CoordinateSpace } from '../render/coordinate-space';
 import type { OverlayDrawContext } from '../render/overlay/overlay-canvas';
 import { CHART_THEME } from '../render/theme';
 import { FIB_LEVELS, handlePositions, project, type Projection } from './geometry';
-import type { DrawingObject } from './types';
+import { TOOL_POINT_COUNT, type DrawingObject } from './types';
 
 const HANDLE_SIZE = 7;
 
@@ -74,12 +74,17 @@ export function drawDrawings(
   }
 
   if (preview) {
-    const proj = project(preview, coords);
-    if (proj.complete) {
-      ctx.save();
-      ctx.globalAlpha = 0.9;
-      drawShape(ctx, preview, proj, false);
-      ctx.restore();
+    // Only render once the preview has all anchors its shape requires —
+    // partial previews (e.g. one trendline point) would index undefined.
+    const required = TOOL_POINT_COUNT[preview.kind] ?? 2;
+    if (preview.points.length >= required) {
+      const proj = project(preview, coords);
+      if (proj.complete) {
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        drawShape(ctx, preview, proj, false);
+        ctx.restore();
+      }
     }
   }
 }

@@ -133,7 +133,6 @@ body {
 }
 
 /* Slim scrollbars for panels */
-.openchart-legend,
 aside ::-webkit-scrollbar,
 div::-webkit-scrollbar {
   width: 8px;

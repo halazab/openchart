@@ -139,6 +139,8 @@ export interface MarketDataProvider {
   readonly name: string;
   /** True when historical/realtime data is generated locally (offline). */
   readonly offline: boolean;
+  /** Provider-appropriate watchlist symbols (set on provider switch). */
+  readonly defaultWatchlist?: string[];
 
   searchSymbols(query: string, limit?: number): Promise<SymbolInfo[]>;
   getSymbol(symbol: string): Promise<SymbolInfo>;

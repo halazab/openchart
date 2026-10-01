@@ -183,6 +183,7 @@ from the new provider and re-subscribes. Drawings are provider-independent
 
 ## 8. Testing checklist for a new provider
 
+
 - [ ] `fetchBars` returns ascending bars; `end` boundary is exclusive
 - [ ] `hasMore` eventually false (or documented infinite)
 - [ ] Unsubscribing stops all vendor traffic for that symbol
@@ -191,9 +192,41 @@ from the new provider and re-subscribes. Drawings are provider-independent
 - [ ] Works with extended-hours display toggles (`extended` flag) if equity
 - [ ] Reload the page mid-stream — no duplicate/zero bars after reconnect
 
-## 9. In-tree providers
+## 9. Server-side vendor bridges (the TradingView pattern)
+
+Some vendors cannot be reached from a browser (custom Origin headers, private
+protocols, IP allowlists). The provider seam supports a two-tier adapter:
+
+```
+Browser adapter (provider-sdk vocabulary)
+   └── socket.io over the gateway:  io('/?XTransformPort=<port>')
+          └── Node bridge mini-service (mini-services/<vendor>-bridge/)
+                 └── vendor SDK / raw WebSocket
+```
+
+Rules for a bridge:
+
+- Translate vendor payloads to normalized `Bar`/`Quote`/`Trade` events on the
+  server; the browser adapter stays vendor-agnostic.
+- Use socket.io **ack callbacks** for request/response RPCs (`history`,
+  `meta`, `search`) and plain events for streams. Ack payloads must survive
+  as single arguments — socket.io does NOT wrap them, so array results pass
+  through untouched (a wrong "unwrap first element" on the client silently
+  corrupts array acks — this bit us during integration).
+- Coalesce high-frequency vendor streams server-side (the bridge flushes bar
+  bursts at 10 Hz) in addition to the client's BatchingIngestor.
+- Supervise vendor connections: one client, reconnect with backoff, full
+  resubscribe of charts/quotes after reconnect, per-socket cleanup on
+  disconnect.
+- Keep the bridge port out of URLs — only `XTransformPort` in the query.
+
+The reference implementation is `mini-services/tradingview-bridge/` with the
+browser adapter in `src/providers/tradingview/index.ts`.
+
+## 10. In-tree providers
 
 | Provider | Offline | History | Realtime | Notes |
 |---|---|---|---|---|
 | `synthetic` | ✓ | 1m base, cached per-TF aggregation, ~10.5 months | tick feed → `TradeAggregator` | deterministic seeds; equity sessions 08:00–24:00 UTC incl. pre/post |
 | `binance` | ✗ | `/api/v3/klines` (1000/page loop) | combined WS: `@kline_<tf>` + `@miniTicker` | public endpoints, no key; browser CORS OK |
+| `tradingview` | ✗ | TradingView chart sessions (chunked `to`/`range` fetches) | TV chart + quote sessions via socket.io bridge | Node-only library behind `mini-services/tradingview-bridge`; full TV symbol universe (`EXCHANGE:SYMBOL` ids) |
